@@ -199,14 +199,12 @@ DROP TABLE IF EXISTS `Membership`;
 CREATE TABLE `Membership` (
   `MembershipID` int NOT NULL AUTO_INCREMENT,
   `VisitorID` int NOT NULL,
-  `MembershipLevel` tinyint DEFAULT 0,
   `IsExpired` bit(1) DEFAULT 0,
   `StartDate` date NOT NULL,
   `ExpirationDate` date NOT NULL,
   PRIMARY KEY (`MembershipID`),
   UNIQUE KEY `VisitorID` (`VisitorID`),
   CONSTRAINT `MembershipVisitorFK` FOREIGN KEY (`VisitorID`) REFERENCES `Visitor` (`VisitorID`) ON DELETE RESTRICT,
-  CONSTRAINT `MembershipLevelCheck` CHECK (`MembershipLevel` >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 

@@ -1,0 +1,47 @@
+:root{
+  --bg:#FCFBF7; /* light cream */
+  --accent:#1e40af; /* blue */
+  --accent-2:#2563eb;
+  --muted:rgba(2,6,23,0.72);
+  --card:#ffffff;
+  --glass: rgba(2,6,23,0.04);
+}
+
+*{box-sizing:border-box}
+body{font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial}
+
+.home-root{min-height:100vh;background:var(--bg);color:var(--muted);display:flex;flex-direction:column}
+
+.home-header{display:flex;align-items:center;justify-content:space-between;padding:20px 36px}
+.brand{font-weight:700;font-size:20px;color:var(--muted)}
+nav{display:flex;gap:14px;align-items:center}
+.nav-link{color:var(--muted);text-decoration:none;font-weight:600}
+.btn-login{padding:8px 12px;border-radius:10px;background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#fff;text-decoration:none;font-weight:700}
+
+.hero{display:grid;grid-template-columns:1fr 420px;gap:32px;align-items:center;padding:80px 36px}
+.hero-inner{max-width:840px}
+.hero-title{font-size:44px;line-height:1.02;margin:0 0 12px;color:var(--muted)}
+.hero-sub{margin:0 0 20px;color:rgba(2,6,23,0.6);font-size:18px}
+.hero-cta{display:flex;gap:12px}
+.btn{display:inline-block;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700}
+.btn.primary{background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#fff;border:1px solid rgba(30,64,175,0.12);box-shadow:0 6px 18px rgba(37,99,235,0.06)}
+.btn.ghost{background:transparent;border:1px solid rgba(2,6,23,0.06);color:var(--muted)}
+.hero-image{height:420px;border-radius:14px;background:linear-gradient(135deg, rgba(37,99,235,0.06), rgba(37,99,235,0.02));box-shadow:0 12px 40px rgba(2,6,23,0.06)}
+
+.features{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;padding:36px}
+.feature{background:var(--card);padding:18px;border-radius:12px;color:var(--muted);box-shadow:0 8px 30px rgba(2,6,23,0.04)}
+.feature h3{margin:0 0 6px}
+.feature p{margin:0;color:rgba(2,6,23,0.6)}
+
+.home-footer{text-align:center;padding:24px;color:rgba(2,6,23,0.5)}
+
+@media (max-width:920px){
+  .hero{grid-template-columns:1fr;}
+  .features{grid-template-columns:1fr 1fr}
+}
+@media (max-width:520px){
+  .features{grid-template-columns:1fr}
+  .hero-title{font-size:28px}
+  .hero-image{height:200px}
+  .home-header{padding:12px 18px}
+}

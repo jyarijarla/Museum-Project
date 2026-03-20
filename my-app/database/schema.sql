@@ -163,7 +163,7 @@ CREATE TABLE `GeneralAdmissionPrices` (
 -- Table structure for table `GeneralAdmissionPricesOnDate`
 --
 
-DROP TABLE IF EXISTS `GeneralAdmissionPricesOnDate`;
+DROP TABLE IF EXISTS `DailyGeneralAdmissionPrices`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `DailyGeneralAdmissionPrices` (
@@ -185,7 +185,7 @@ CREATE TABLE `Job` (
   `JobID` int NOT NULL AUTO_INCREMENT,
   `Name` int NOT NULL,
   `Description` varchar(300),
-  PRIMARY KEY (`RoleID`)
+  PRIMARY KEY (`JobID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -204,7 +204,7 @@ CREATE TABLE `Membership` (
   `ExpirationDate` date NOT NULL,
   PRIMARY KEY (`MembershipID`),
   UNIQUE KEY `VisitorID` (`VisitorID`),
-  CONSTRAINT `MembershipVisitorFK` FOREIGN KEY (`VisitorID`) REFERENCES `Visitor` (`VisitorID`) ON DELETE RESTRICT,
+  CONSTRAINT `MembershipVisitorFK` FOREIGN KEY (`VisitorID`) REFERENCES `Visitor` (`VisitorID`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -252,7 +252,7 @@ CREATE TABLE `Staff` (
   UNIQUE KEY `UserID` (`UserID`),
   KEY `DepartmentID` (`DepartmentID`),
   KEY `SupervisorID` (`SupervisorID`),
-  KEY `RoleID` (`RoleID`),
+  KEY `JobID` (`JobID`),
   CONSTRAINT `StaffUserID` FOREIGN KEY (`UserID`) REFERENCES `UserAccount` (`UserID`),
   CONSTRAINT `StaffDepartment` FOREIGN KEY (`DepartmentID`) REFERENCES `Department` (`DepartmentID`),
   CONSTRAINT `StaffSupervisor` FOREIGN KEY (`SupervisorID`) REFERENCES `Staff` (`EmployeeID`),

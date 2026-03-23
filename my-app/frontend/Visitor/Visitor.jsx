@@ -1,18 +1,23 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import './Home.css'
-import { useAuth } from '../../src/AuthContext.jsx'
+import './Visitor.css'
 
-export default function Home(){
+export default function Visitor(){
   const navigate = useNavigate()
-  const { user, logout } = useAuth()
+    const { user, logout } = useAuth()
+
+  useEffect(()=>{
+      if(!user){
+        navigate('/login')
+      }
+  },[user, navigate])
 
   const handleLogout = ()=>{
-    logout()
+      logout()
     navigate('/')
   }
 
-  const displayName = user?.Username || user?.username || null
+    const displayName = user?.Username || user?.username || 'Visitor'
 
   return (
     <div className="home-root">
@@ -24,23 +29,16 @@ export default function Home(){
           <Link className="nav-link" to="/membership">Membership</Link>
           <Link className="nav-link" to="/giftshop">Gift Shop</Link>
           <Link className="nav-link" to="/about">About</Link>
-          {user ? (
-            <>
-              <div style={{marginRight:12,color:'var(--muted)',fontWeight:700}}>Hi, {displayName}</div>
-              <button className="btn-login" onClick={handleLogout}>Logout</button>
-            </>
-          ) : (
-            <Link className="btn-login" to="/login">Login</Link>
-          )}
+          <button className="btn-login" onClick={handleLogout}>Logout</button>
         </nav>
       </header>
 
       <section className="hero">
         <div className="hero-inner">
-          <h1 className="hero-title">Discover the stories behind every artifact</h1>
-          <p className="hero-sub">Explore rotating exhibits, collections, and curator resources at City Museum.</p>
+          <h1 className="hero-title">Welcome, {displayName}</h1>
+          <p className="hero-sub">You are signed in — access curator tools and your dashboard here.</p>
           <div className="hero-cta">
-            <Link className="btn primary" to="/login">Curator Login</Link>
+            <Link className="btn primary" to="/login">Account Settings</Link>
             <a className="btn ghost" href="#exhibits">See Exhibits</a>
           </div>
         </div>
@@ -63,7 +61,7 @@ export default function Home(){
       </section>
 
       <footer className="home-footer">
-        © {new Date().getFullYear()} City Museum — All rights reserved.
+        © {new Date().getFullYear()} City Museum — Logged in as {displayName}
       </footer>
     </div>
   )

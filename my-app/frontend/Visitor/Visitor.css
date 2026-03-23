@@ -15,9 +15,7 @@ body{font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial}
 .home-header{display:flex;align-items:center;justify-content:space-between;padding:20px 36px}
 .brand{font-weight:700;font-size:20px;color:var(--muted)}
 nav{display:flex;gap:14px;align-items:center}
-.brand-link{color:var(--muted);text-decoration:none;font-weight:700}
-.nav-link{color:var(--muted);text-decoration:none;font-weight:600;padding:6px 8px;border-radius:8px;transition:background .12s ease,color .12s ease}
-.nav-link:hover{background:rgba(37,99,235,0.06)}
+.nav-link{color:var(--muted);text-decoration:none;font-weight:600}
 .btn-login{padding:8px 12px;border-radius:10px;background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#fff;text-decoration:none;font-weight:700}
 
 .hero{display:grid;grid-template-columns:1fr 420px;gap:32px;align-items:center;padding:80px 36px}

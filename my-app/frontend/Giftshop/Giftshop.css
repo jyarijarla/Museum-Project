@@ -1,0 +1,21 @@
+@import "../Home/Home.css";
+
+.gift-main{padding:36px}
+.gift-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;max-width:1100px;margin:0 auto}
+.gift-card{background:var(--card);padding:18px;border-radius:12px;box-shadow:0 12px 40px rgba(2,6,23,0.04);display:flex;flex-direction:column;gap:12px}
+.gift-image{width:100%;height:160px;border-radius:10px;background:linear-gradient(135deg, rgba(37,99,235,0.06), rgba(2,6,23,0.02));box-shadow:inset 0 -24px 40px rgba(2,6,23,0.02)}
+.gift-card h3{margin:0}
+.gift-card .muted{color:rgba(2,6,23,0.6);margin:6px 0 0}
+.gift-details{min-width:0}
+.gift-actions{display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:12px}
+.price{font-weight:800;color:var(--accent)}
+
+/* Button placed to the right of the card row; light blue background with darker hover */
+.gift-actions .btn.primary{padding:6px 10px;font-size:13px;border-radius:10px;box-shadow:none;min-width:56px;max-width:110px;background:linear-gradient(90deg, rgba(37,99,235,0.06), rgba(37,99,235,0.08));color:var(--accent-2);border:1px solid rgba(37,99,235,0.08)}
+.gift-actions .btn.primary:hover{background:linear-gradient(90deg, rgba(37,99,235,0.12), rgba(37,99,235,0.2));transform:translateY(-2px)}
+
+@media (max-width:920px){.gift-grid{grid-template-columns:1fr 1fr}}
+@media (max-width:520px){.gift-grid{grid-template-columns:1fr}.hero-image{height:200px}}
+
+@media (max-width:920px){.gift-grid{grid-template-columns:1fr 1fr}}
+@media (max-width:520px){.gift-grid{grid-template-columns:1fr}.hero-image{height:200px}}

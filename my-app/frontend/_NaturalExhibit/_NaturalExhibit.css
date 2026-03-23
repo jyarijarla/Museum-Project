@@ -1,0 +1,21 @@
+@import "../Home/Home.css";
+
+.natural-hero{background:linear-gradient(180deg, rgba(34,197,94,0.03), rgba(34,197,94,0.02));}
+.natural-visual{background:linear-gradient(135deg,#d1f7e6,#e8fbf0);border-radius:14px;height:420px}
+
+.exhibit-main{padding:36px}
+.card-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.exhibit-card{background:var(--card);padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.04);text-align:center}
+.card-image{height:160px;border-radius:10px;margin-bottom:12px;background-size:cover;background-position:center}
+.biome.rainforest{background:linear-gradient(180deg,#6abf6a,#2f8a4a)}
+.biome.desert{background:linear-gradient(180deg,#f2d49c,#d19a4a)}
+.biome.ocean{background:linear-gradient(180deg,#7fcbe6,#2b8fb6)}
+
+.timeline{background:var(--card);padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.04)}
+.fossil-item{padding:12px 0;border-bottom:1px solid rgba(2,6,23,0.04)}
+
+.gallery-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.gallery-item{height:140px;border-radius:10px;background:linear-gradient(135deg, rgba(34,197,94,0.06), rgba(2,6,23,0.02));box-shadow:0 8px 20px rgba(2,6,23,0.04)}
+
+@media (max-width:920px){.card-grid{grid-template-columns:1fr 1fr}.gallery-grid{grid-template-columns:1fr 1fr}}
+@media (max-width:520px){.card-grid{grid-template-columns:1fr}.gallery-grid{grid-template-columns:1fr}.hero-image{height:200px}}

@@ -1,0 +1,22 @@
+@import "../Home/Home.css";
+
+.space-hero{background:linear-gradient(180deg, rgba(37,99,235,0.04), rgba(37,99,235,0.02));}
+.space-visual{background:radial-gradient(circle at 30% 30%, rgba(37,99,235,0.18), transparent 20%), linear-gradient(135deg, rgba(2,6,23,0.03), rgba(37,99,235,0.03)); border-radius:14px; height:420px}
+
+.exhibit-main{padding:36px}
+.exhibit-section{max-width:1100px;margin:0 auto 28px}
+.card-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.exhibit-card{background:var(--card);padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.04);text-align:center}
+.card-image{height:160px;border-radius:10px;margin-bottom:12px;background-size:cover;background-position:center}
+.planet.mercury{background:linear-gradient(180deg,#b88e6f,#a06f4f)}
+.planet.jupiter{background:linear-gradient(180deg,#e8cfa6,#bf8a4a)}
+.planet.exoplanet{background:linear-gradient(180deg,#6b8bff,#2b5cd6)}
+
+.timeline{background:var(--card);padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.04);list-style:none}
+.timeline li{padding:8px 0;border-bottom:1px solid rgba(2,6,23,0.04)}
+
+.gallery-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.gallery-item{height:160px;border-radius:10px;background:linear-gradient(135deg, rgba(37,99,235,0.06), rgba(2,6,23,0.02));box-shadow:0 8px 20px rgba(2,6,23,0.04)}
+
+@media (max-width:920px){.card-grid{grid-template-columns:1fr 1fr}.gallery-grid{grid-template-columns:1fr 1fr}}
+@media (max-width:520px){.card-grid{grid-template-columns:1fr}.gallery-grid{grid-template-columns:1fr}.hero-image{height:200px}}

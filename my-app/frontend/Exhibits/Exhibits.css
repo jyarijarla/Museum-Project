@@ -1,0 +1,14 @@
+@import "../Home/Home.css";
+
+.exhibits-main{padding:36px}
+.exhibit-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;max-width:1100px;margin:0 auto}
+.exhibit-card-link{text-decoration:none;color:inherit}
+.exhibit-card{background:var(--card);padding:18px;border-radius:12px;box-shadow:0 12px 40px rgba(2,6,23,0.04);display:flex;flex-direction:column;align-items:center;transition:transform .18s ease,box-shadow .18s ease}
+.exhibit-card:hover{transform:translateY(-6px);box-shadow:0 24px 60px rgba(2,6,23,0.08)}
+.card-image{height:180px;width:100%;border-radius:10px;margin-bottom:12px;background-size:cover;background-position:center}
+.exhibit-space{background:linear-gradient(135deg,#6b8bff,#2b5cd6)}
+.exhibit-natural{background:linear-gradient(135deg,#7fcbe6,#2b8fb6)}
+.exhibit-ancient{background:linear-gradient(135deg,#efe0c6,#f7efe3)}
+
+@media (max-width:920px){.exhibit-cards{grid-template-columns:1fr 1fr}}
+@media (max-width:520px){.exhibit-cards{grid-template-columns:1fr}.hero-image{height:200px}}

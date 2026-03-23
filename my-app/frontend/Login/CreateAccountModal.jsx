@@ -2,33 +2,59 @@ import React, { useState, useEffect, useRef } from 'react'
 
 export default function CreateAccountModal({ onClose }){
   const [form, setForm] = useState({
-    username:'', firstName:'', lastName:'', phone:'', email:'', dob:'', password:'', confirm:''
+    username:'', firstName:'', lastName:'', phone:'', email:'', dob:'', address:'', password:'', confirm:''
   })
   const [error, setError] = useState('')
   const backdropRef = useRef(null)
 
   const handleChange = (e) => setForm(f => ({...f,[e.target.name]: e.target.value}))
 
-  const handleSubmit = (e) =>{
+  const handleSubmit = async (e) =>{
     e.preventDefault()
     setError('')
+
     const { username, email, password, confirm } = form
-    if(!username || !email || !password || !confirm){ setError('Please fill required fields'); return }
-    if(password !== confirm){ setError('Passwords do not match'); return }
-    if(password.length < 8){ setError('Password must be at least 8 characters'); return }
 
-    const users = JSON.parse(localStorage.getItem('users')|| '[]')
-    if(users.find(u => u.email === email)){ setError('An account with that email already exists'); return }
-    if(users.find(u => u.username === username)){ setError('Username already taken'); return }
+    if(!username || !email || !password || !confirm){ 
+      setError('Please fill required fields'); 
+      return 
+    }
 
-    const newUser = { ...form, createdAt: new Date().toISOString() }
-    users.push(newUser)
-    localStorage.setItem('users', JSON.stringify(users))
+    if(password !== confirm){ 
+      setError('Passwords do not match'); 
+      return 
+    }
 
-    if(onClose) onClose(true)
+    if(password.length < 8){ 
+      setError('Password must be at least 8 characters'); 
+      return 
+    }
+
+    // ✅ REPLACED localStorage WITH BACKEND CALL
+    try {
+      const res = await fetch("http://localhost:5000/api/signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(form)
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error || "Signup failed")
+        return
+      }
+
+      if(onClose) onClose(true)
+
+    } catch (err) {
+      console.error(err)
+      setError("Server error")
+    }
   }
 
-  // close on click outside
   useEffect(()=>{
     const onKey = (e)=>{ if(e.key==='Escape') onClose(false) }
     document.addEventListener('keydown', onKey)
@@ -101,6 +127,11 @@ export default function CreateAccountModal({ onClose }){
               <label>
                 <span>DOB</span>
                 <input name="dob" type="date" value={form.dob} onChange={handleChange} />
+              </label>
+
+              <label className="full-width">
+                <span>Address</span>
+                <input name="address" value={form.address} onChange={handleChange} placeholder="Street, City, State, ZIP" />
               </label>
             </div>
 

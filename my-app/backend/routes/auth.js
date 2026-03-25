@@ -42,14 +42,34 @@ router.post("/signup", async (req, res) => {
       [username, hashedPassword]
     );
 
-    // Insert into Visitor (schema does not include a UserID column in this DB)
-    await db.execute(
-      `INSERT INTO Visitor (FirstName, LastName, PhoneNumber, Email, DateOfBirth, Address)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [firstName, lastName, phone, email, dob, address]
-    );
+    const createdUserId = result && result.insertId ? result.insertId : null;
 
-    res.json({ success: true });
+    // Try to insert Visitor row linking to UserAccount.UserID when possible.
+    // Some DBs may have a Visitor.UserID column; if present, use it. Otherwise
+    // fall back to inserting without UserID.
+    let visitorId = null;
+    try {
+      const [vRes] = await db.execute(
+        `INSERT INTO Visitor (UserID, FirstName, LastName, PhoneNumber, Email, DateOfBirth, Address)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [createdUserId, firstName, lastName, phone, email, dob, address]
+      );
+      visitorId = vRes && vRes.insertId ? vRes.insertId : null;
+    } catch (vErr) {
+      // If column doesn't exist, insert without UserID
+      if (vErr && (vErr.code === 'ER_BAD_FIELD_ERROR' || vErr.code === 'ER_UNKNOWN_COLUMN')) {
+        const [vRes2] = await db.execute(
+          `INSERT INTO Visitor (FirstName, LastName, PhoneNumber, Email, DateOfBirth, Address)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [firstName, lastName, phone, email, dob, address]
+        );
+        visitorId = vRes2 && vRes2.insertId ? vRes2.insertId : null;
+      } else {
+        throw vErr;
+      }
+    }
+
+    res.json({ success: true, userId: createdUserId, visitorId });
 
   } catch (err) {
     console.error(err);

@@ -330,7 +330,7 @@ CREATE TABLE `UserAccount` (
   `UserID` int NOT NULL AUTO_INCREMENT,
   `Username` varchar(50) NOT NULL,
   `PasswordHash` varchar(255) NOT NULL,
-  `Role` enum('Admin', 'Gift_Shop_Manager', 'Employee') NOT NULL,
+  `Role` enum('Admin', 'Gift_Shop_Manager', 'Employee', 'Visitor') NOT NULL,
   PRIMARY KEY (`UserID`),
   UNIQUE KEY `Username` (`Username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

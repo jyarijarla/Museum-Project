@@ -21,17 +21,33 @@ export default function Login() {
     };
 
     try {
-      const res = await fetch("http://localhost:5000/api/login", {
+        const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+        console.log('[login] using apiBase=', apiBase)
+        console.log("ENV:", import.meta.env)
+        const res = await fetch(`${apiBase}/api/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
 
-      const result = await res.json();
+      let result = await res.json();
 
       if (!res.ok) {
         setError(result.error || "Login failed")
         return;
+      }
+
+      // If backend didn't include first/last name, fetch visitor record
+      if ((!result.firstName || !result.lastName) && result.userId) {
+        try {
+          const vRes = await fetch(`${apiBase}/api/visitor/${result.userId}`)
+          if (vRes.ok) {
+            const vJson = await vRes.json()
+            if (vJson && vJson.visitor) {
+              result = { ...result, firstName: vJson.visitor.FirstName || result.firstName, lastName: vJson.visitor.LastName || result.lastName, email: vJson.visitor.Email || result.email }
+            }
+          }
+        } catch(e){ console.warn('visitor fetch failed', e) }
       }
 
       // persist via AuthContext

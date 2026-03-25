@@ -2,6 +2,7 @@ import React from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import './Home.css'
 import { useAuth } from '../../src/AuthContext.jsx'
+import ProfileMenu from '../components/ProfileMenu.jsx'
 
 export default function Home(){
   const navigate = useNavigate()
@@ -24,10 +25,7 @@ export default function Home(){
           <Link className="nav-link" to="/membership">Membership</Link>
           <Link className="nav-link" to="/giftshop">Gift Shop</Link>
           {user ? (
-            <>
-              <div style={{marginRight:12,color:'var(--muted)',fontWeight:700}}>Hi, {displayName}</div>
-              <button className="btn-login" onClick={handleLogout}>Logout</button>
-            </>
+            <div style={{marginRight:8}}><ProfileMenu/></div>
           ) : (
             <Link className="btn-login" to="/login">Login</Link>
           )}

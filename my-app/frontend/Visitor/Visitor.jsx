@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import './Visitor.css'
+import ProfileMenu from '../components/ProfileMenu.jsx'
 
 export default function Visitor(){
   const navigate = useNavigate()
@@ -29,7 +30,7 @@ export default function Visitor(){
           <Link className="nav-link" to="/membership">Membership</Link>
           <Link className="nav-link" to="/giftshop">Gift Shop</Link>
           
-          <button className="btn-login" onClick={handleLogout}>Logout</button>
+          <div style={{marginRight:8}}><ProfileMenu/></div>
         </nav>
       </header>
 

@@ -97,9 +97,12 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ error: 'Missing username/email' });
     }
 
-    // lookup by username (the DB stores credentials on UserAccount.Username)
+    // lookup by username and include Visitor info when available
     const [rows] = await db.execute(
-      `SELECT * FROM UserAccount WHERE Username = ?`,
+      `SELECT ua.*, v.FirstName, v.LastName, v.Email as VisitorEmail
+       FROM UserAccount ua
+       LEFT JOIN Visitor v ON v.UserID = ua.UserID
+       WHERE ua.Username = ?`,
       [identifier]
     );
 
@@ -120,7 +123,11 @@ router.post("/login", async (req, res) => {
 
     res.json({
       userId: user.UserID,
-      role: user.Role
+      username: user.Username,
+      role: user.Role,
+      firstName: user.FirstName || null,
+      lastName: user.LastName || null,
+      email: user.VisitorEmail || null
     });
 
   } catch (err) {
@@ -130,3 +137,19 @@ router.post("/login", async (req, res) => {
 });
 
 export default router;
+
+// DEBUG: fetch visitor by user id (tries UserID then VisitorID)
+router.get('/visitor/:id', async (req, res) => {
+  const { id } = req.params
+  try {
+    const [rows] = await db.execute(
+      `SELECT * FROM Visitor WHERE UserID = ? OR VisitorID = ? LIMIT 1`,
+      [id, id]
+    )
+    if (!rows || rows.length === 0) return res.status(404).json({ error: 'Not found' })
+    res.json({ visitor: rows[0] })
+  } catch (err) {
+    console.error('Visitor lookup failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})

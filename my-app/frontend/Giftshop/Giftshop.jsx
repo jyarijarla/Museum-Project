@@ -25,7 +25,7 @@ export default function Giftshop(){
           <Link className="nav-link" to="/exhibits">Exhibits</Link>
           <Link className="nav-link" to="/membership">Membership</Link>
           <Link className="nav-link" to="/giftshop">Gift Shop</Link>
-          <Link className="nav-link" to="/about">About</Link>
+          
           {user ? (
             <>
               <div style={{marginRight:12,color:'var(--muted)',fontWeight:700}}>Hi, {displayName}</div>

@@ -36,9 +36,9 @@ router.post("/signup", async (req, res) => {
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Insert into UserAccount - use a valid Role from the schema enum
+    // Insert into UserAccount - new signups should be Visitors by default
     const [result] = await db.execute(
-      "INSERT INTO UserAccount (Username, PasswordHash, Role) VALUES (?, ?, 'Employee')",
+      "INSERT INTO UserAccount (Username, PasswordHash, Role) VALUES (?, ?, 'Visitor')",
       [username, hashedPassword]
     );
 

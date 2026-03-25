@@ -28,7 +28,7 @@ export default function Visitor(){
           <Link className="nav-link" to="/exhibits">Exhibits</Link>
           <Link className="nav-link" to="/membership">Membership</Link>
           <Link className="nav-link" to="/giftshop">Gift Shop</Link>
-          <Link className="nav-link" to="/about">About</Link>
+          
           <button className="btn-login" onClick={handleLogout}>Logout</button>
         </nav>
       </header>

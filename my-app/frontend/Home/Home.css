@@ -20,30 +20,61 @@ nav{display:flex;gap:14px;align-items:center}
 .nav-link:hover{background:rgba(37,99,235,0.06)}
 .btn-login{padding:8px 12px;border-radius:10px;background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#fff;text-decoration:none;font-weight:700}
 
-.hero{display:grid;grid-template-columns:1fr 420px;gap:32px;align-items:center;padding:80px 36px}
-.hero-inner{max-width:840px}
-.hero-title{font-size:44px;line-height:1.02;margin:0 0 12px;color:var(--muted)}
-.hero-sub{margin:0 0 20px;color:rgba(2,6,23,0.6);font-size:18px}
+.hero{display:grid;grid-template-columns:1fr 380px;gap:28px;align-items:center;padding:56px 36px}
+.hero-inner{max-width:720px}
+.hero-title{font-size:36px;line-height:1.08;margin:0 0 14px;color:var(--muted);font-weight:800}
+.hero-sub{margin:0 0 20px;color:rgba(2,6,23,0.64);font-size:16px}
 .hero-cta{display:flex;gap:12px}
 .btn{display:inline-block;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700}
 .btn.primary{background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#fff;border:1px solid rgba(30,64,175,0.12);box-shadow:0 6px 18px rgba(37,99,235,0.06)}
 .btn.ghost{background:transparent;border:1px solid rgba(2,6,23,0.06);color:var(--muted)}
 .hero-image{height:420px;border-radius:14px;background:linear-gradient(135deg, rgba(37,99,235,0.06), rgba(37,99,235,0.02));box-shadow:0 12px 40px rgba(2,6,23,0.06)}
 
-.features{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;padding:36px}
-.feature{background:var(--card);padding:18px;border-radius:12px;color:var(--muted);box-shadow:0 8px 30px rgba(2,6,23,0.04)}
-.feature h3{margin:0 0 6px}
-.feature p{margin:0;color:rgba(2,6,23,0.6)}
+/* features removed (replaced by full-width bands) */
 
 .home-footer{text-align:center;padding:24px;color:rgba(2,6,23,0.5)}
 
+/* About section merged into Home */
+.about-section{padding:48px 36px;background:linear-gradient(180deg, rgba(37,99,235,0.02), rgba(2,6,23,0.00));border-top:1px solid rgba(2,6,23,0.04)}
+.about-grid{display:grid;grid-template-columns:360px 1fr;gap:32px;align-items:start;max-width:1100px;margin:0 auto}
+.about-image{height:280px;border-radius:14px;background:linear-gradient(135deg, rgba(37,99,235,0.06), rgba(2,6,23,0.02));box-shadow:0 12px 40px rgba(2,6,23,0.06)}
+.about-content h2{margin-top:0;font-size:28px}
+.about-content p{color:rgba(2,6,23,0.66);line-height:1.6;margin-bottom:12px}
+.about-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:18px}
+.about-card{background:var(--card);padding:14px;border-radius:12px;box-shadow:0 8px 24px rgba(2,6,23,0.04)}
+.about-card h4{margin:0 0 6px}
+.about-card p{margin:0;color:rgba(2,6,23,0.6)}
+
 @media (max-width:920px){
-  .hero{grid-template-columns:1fr;}
-  .features{grid-template-columns:1fr 1fr}
+  .hero{grid-template-columns:1fr}
 }
 @media (max-width:520px){
-  .features{grid-template-columns:1fr}
-  .hero-title{font-size:28px}
+  .hero-title{font-size:24px}
   .hero-image{height:200px}
   .home-header{padding:12px 18px}
+  .about-grid{grid-template-columns:1fr;gap:12px}
+  .about-image{height:200px}
+  .about-cards{grid-template-columns:1fr}
 }
+
+/* Highlights removed (replaced by full-width bands) */
+
+/* Full-width bands for previews */
+.band{width:100%;padding:44px 0}
+.band-inner{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1fr 420px;gap:28px;align-items:center;padding:0 36px}
+.band.reverse .band-inner, .band-inner.reverse{grid-template-columns:420px 1fr}
+.band-content h3{margin:0 0 8px}
+.band-media{height:220px;border-radius:12px;background-size:cover;background-position:center;box-shadow:0 12px 40px rgba(2,6,23,0.06)}
+
+/* Alternating backgrounds (increased contrast) */
+.band-exhibits{background:#ffffff}
+.band-membership{background:linear-gradient(180deg,#eef6ff,#e6f0ff)}
+.band-giftshop{background:#fff8f0}
+
+/* Band media variants (subtle visuals) */
+.band-media-exhibits{background:linear-gradient(135deg,#6b8bff,#2b5cd6)}
+.band-media-membership{background:linear-gradient(135deg,#f7f9fc,#eaf4ff)}
+.band-media-giftshop{background:linear-gradient(135deg,#fff6ee,#fff2e6)}
+
+@media (max-width:920px){.band-inner{grid-template-columns:1fr}.band.reverse .band-inner{grid-template-columns:1fr}}
+@media (max-width:520px){.band{padding:28px 0}.band-media{height:160px}} 

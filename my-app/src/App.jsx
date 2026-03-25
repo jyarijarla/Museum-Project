@@ -8,7 +8,6 @@ import Exhibits from '../frontend/Exhibits/Exhibits.jsx'
 import SpaceExhibit from '../frontend/_SpaceExhibit/_SpaceExhibit.jsx'
 import NaturalExhibit from '../frontend/_NaturalExhibit/_NaturalExhibit.jsx'
 import AncientExhibit from '../frontend/_AncientExhibit/AncientExhibit.jsx'
-import About from '../frontend/About/About.jsx'
 import Giftshop from '../frontend/Giftshop/Giftshop.jsx'
 
 function App() {
@@ -20,7 +19,6 @@ function App() {
       <Route path="/dashboard" element={<Visitor/>} />
       <Route path="/membership" element={<Membership/>} />
       <Route path="/exhibits" element={<Exhibits/>} />
-      <Route path="/about" element={<About/>} />
       <Route path="/giftshop" element={<Giftshop/>} />
       <Route path="/exhibits/space" element={<SpaceExhibit/>} />
       <Route path="/exhibits/natural" element={<NaturalExhibit/>} />

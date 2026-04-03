@@ -10,3 +10,10 @@
 .logout-option{display:block;width:100%;padding:8px;border-radius:8px;border:1px solid rgba(0,0,0,0.06);background:transparent;text-align:left;cursor:pointer}
 .logout-option:hover{background:rgba(0,0,0,0.04)}
 .profile-dropdown .btn.primary{width:100%;padding:8px;border-radius:8px}
+
+.profile-actions .btn{position:relative;padding:10px 12px;border-radius:8px;background:linear-gradient(180deg,#fff,#fbfbff);border:1px solid rgba(10,20,40,0.04)}
+.cart-badge{display:inline-flex;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:#ff5b3a;color:#fff;font-weight:800;font-size:12px;align-items:center;justify-content:center;margin-left:8px;box-shadow:0 6px 14px rgba(255,91,58,0.14)}
+
+/* avatar badge overlay */
+.avatar-wrap{position:relative;display:inline-block;overflow:visible}
+.avatar-badge{position:absolute;right:-6px;top:-6px;background:#ff3b30;color:#fff;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;box-shadow:0 6px 14px rgba(255,59,48,0.18);pointer-events:none;border:2px solid #fff}

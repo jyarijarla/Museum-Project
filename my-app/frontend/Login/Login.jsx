@@ -10,7 +10,6 @@ export default function Login() {
   const [error, setError] = useState('')
   const { login } = useAuth()
 
-  // ✅ MUST be async
   const handleSubmit = async (e) => {
     e.preventDefault();
 

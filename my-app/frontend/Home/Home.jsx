@@ -38,7 +38,7 @@ export default function Home(){
           <p className="hero-sub">Explore rotating exhibits, collections, and curator resources at City Museum.</p>
           <div className="hero-cta">
             <Link className="btn primary" to="/login">Curator Login</Link>
-            <a className="btn ghost" href="#exhibits">See Exhibits</a>
+            <a className="btn ghost" href="exhibits">See Exhibits</a>
           </div>
         </div>
         <div className="hero-image" aria-hidden="true" />

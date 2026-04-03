@@ -1,7 +1,8 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import './Giftshop.css'
 import { useAuth } from '../../src/AuthContext.jsx'
+import { useCart } from '../../src/CartContext.jsx'
 import ProfileMenu from '../components/ProfileMenu.jsx'
 
 export default function Giftshop(){
@@ -10,12 +11,37 @@ export default function Giftshop(){
   const displayName = user?.Username || user?.username || null
   const handleLogout = ()=>{ logout(); navigate('/') }
 
-  const sampleItems = [
-    { id:1, title:'Museum Tote', price:'$24', desc:'Canvas tote with logo'},
-    { id:2, title:'Space Poster', price:'$18', desc:'Limited edition print'},
-    { id:3, title:'Dino Plush', price:'$32', desc:'Soft plush for all ages'},
-    { id:4, title:'Membership Card', price:'$45', desc:'Annual membership - digital'},
-  ]
+  const [products, setProducts] = useState([])
+  const { addItem } = useCart()
+
+  useEffect(()=>{
+    const apiBase = import.meta.env.VITE_API_BASE_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:5000' : '')
+    const url = `${apiBase}/api/products`
+    console.debug('[Giftshop] fetching products from', url)
+    fetch(url).then(async r=>{
+      const text = await r.text()
+      try {
+        const js = JSON.parse(text)
+        if(js && js.products) setProducts(js.products)
+        else setProducts([])
+      } catch (parseErr) {
+        console.error('[Giftshop] products fetch returned non-JSON', { status: r.status, url, contentType: r.headers.get('content-type'), bodyStart: text.slice(0,800) })
+        setProducts([])
+      }
+    }).catch(e=>{
+      console.error('[Giftshop] Failed to load products', e)
+      setProducts([])
+    })
+  },[])
+
+  const onAdd = (it)=>{
+    if(!user){
+      navigate('/login')
+      return
+    }
+    const price = Number(it.RetailPrice || it.price || 0)
+    addItem({ id: it.ProductID || it.id, type: 'product', title: it.Name || it.title, price, desc: it.Description || it.desc })
+  }
 
   return (
     <div className="home-root gift-root">
@@ -45,16 +71,16 @@ export default function Giftshop(){
 
       <main className="gift-main">
         <div className="gift-grid">
-          {sampleItems.map(it=> (
-            <article key={it.id} className="gift-card">
+          {products.map(it=> (
+            <article key={it.ProductID} className="gift-card">
               <div className="gift-image" />
               <div className="gift-details">
-                <h3>{it.title}</h3>
-                <p className="muted">{it.desc}</p>
+                <h3>{it.Name}</h3>
+                <p className="muted">{it.Description}</p>
               </div>
               <div className="gift-actions">
-                <div className="price">{it.price}</div>
-                <button className="btn primary">Add</button>
+                <div className="price">${Number(it.RetailPrice).toFixed(2)}</div>
+                <button className="btn primary" onClick={()=> onAdd(it)}>Add</button>
               </div>
             </article>
           ))}

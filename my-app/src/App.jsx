@@ -9,6 +9,8 @@ import SpaceExhibit from '../frontend/_SpaceExhibit/_SpaceExhibit.jsx'
 import NaturalExhibit from '../frontend/_NaturalExhibit/_NaturalExhibit.jsx'
 import AncientExhibit from '../frontend/_AncientExhibit/AncientExhibit.jsx'
 import Giftshop from '../frontend/Giftshop/Giftshop.jsx'
+import CartPage from '../frontend/Cart/Cart.jsx'
+import Admin from '../frontend/Admin/Admin.jsx'
 
 function App() {
   return (
@@ -20,6 +22,8 @@ function App() {
       <Route path="/membership" element={<Membership/>} />
       <Route path="/exhibits" element={<Exhibits/>} />
       <Route path="/giftshop" element={<Giftshop/>} />
+      <Route path="/cart" element={<CartPage/>} />
+      <Route path="/admin" element={<Admin/>} />
       <Route path="/exhibits/space" element={<SpaceExhibit/>} />
       <Route path="/exhibits/natural" element={<NaturalExhibit/>} />
       <Route path="/exhibits/ancient" element={<AncientExhibit/>} />

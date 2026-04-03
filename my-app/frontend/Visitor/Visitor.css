@@ -28,6 +28,36 @@ nav{display:flex;gap:14px;align-items:center}
 .btn.ghost{background:transparent;border:1px solid rgba(2,6,23,0.06);color:var(--muted)}
 .hero-image{height:420px;border-radius:14px;background:linear-gradient(135deg, rgba(37,99,235,0.06), rgba(37,99,235,0.02));box-shadow:0 12px 40px rgba(2,6,23,0.06)}
 
+/* Dashboard cards */
+.card{background:linear-gradient(180deg, rgba(255,255,255,0.86), rgba(255,255,255,0.98));border-radius:14px;padding:20px;box-shadow:0 12px 40px rgba(2,6,23,0.06);color:var(--muted)}
+.card-header{display:flex;gap:12px;align-items:center;margin-bottom:10px}
+.card-title{margin:0;font-size:18px;color:var(--accent)}
+.card-sub{color:rgba(2,6,23,0.5);font-size:13px}
+.card-body{color:var(--muted);font-size:15px}
+
+.avatar{width:64px;height:64px;border-radius:14px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;box-shadow:0 8px 20px rgba(37,99,235,0.12)}
+
+.account-card .card-body p{margin:8px 0}
+.profile-card .card-body p{margin:6px 0}
+.membership-card .card-body p{margin:6px 0}
+
+/* Actions column */
+.actions-card .actions-body{display:flex;flex-direction:column;gap:10px}
+.actions-card .btn{width:100%}
+
+/* Purchase history */
+.history-card input, .history-card select{border:1px solid rgba(2,6,23,0.06);padding:8px 10px;border-radius:8px}
+.history-card .muted{color:rgba(2,6,23,0.5);font-size:13px}
+.history-card .history-list{max-height:320px;overflow:auto}
+.history-card .history-item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f3f3f3}
+.history-card .history-item .meta{color:rgba(2,6,23,0.6);font-size:13px}
+
+/* subtle responsive tweaks */
+@media (max-width:920px){
+  .card{padding:14px}
+  .avatar{width:56px;height:56px}
+}
+
 .features{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;padding:36px}
 .feature{background:var(--card);padding:18px;border-radius:12px;color:var(--muted);box-shadow:0 8px 30px rgba(2,6,23,0.04)}
 .feature h3{margin:0 0 6px}

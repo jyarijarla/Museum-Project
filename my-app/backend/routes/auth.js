@@ -324,9 +324,27 @@ router.get('/visitor/:id/membership', async (req, res) => {
     const [vrows] = await db.execute('SELECT VisitorID FROM Visitor WHERE UserID = ? OR VisitorID = ? LIMIT 1', [id, id])
     if (!vrows || vrows.length === 0) return res.status(404).json({ error: 'Visitor not found' })
     const visitorId = vrows[0].VisitorID
-    const [mrows] = await db.execute('SELECT * FROM Membership WHERE VisitorID = ? LIMIT 1', [visitorId])
+
+    // JOIN with MembershipType to include the plan name
+    const [mrows] = await db.execute(
+      `SELECT m.*, mt.TypeName
+       FROM Membership m
+       LEFT JOIN MembershipType mt ON mt.TypeID = m.MembershipTypeID
+       WHERE m.VisitorID = ? LIMIT 1`,
+      [visitorId]
+    )
     if (!mrows || mrows.length === 0) return res.status(404).json({ error: 'No membership found for visitor' })
-    res.json({ membership: mrows[0] })
+
+    const row = mrows[0]
+    // Compute a canonical status: respect explicit 'Canceled'; otherwise derive from dates/bit
+    const isExpiredBit = row.IsExpired != null && (Buffer.isBuffer(row.IsExpired) ? row.IsExpired[0] === 1 : row.IsExpired === 1)
+    const isExpiredByDate = row.ExpirationDate && new Date(row.ExpirationDate) < new Date()
+    let computedStatus = row.Status || 'Active'
+    if (computedStatus !== 'Canceled') {
+      computedStatus = (isExpiredBit || isExpiredByDate) ? 'Expired' : 'Active'
+    }
+
+    res.json({ membership: { ...row, computedStatus } })
   } catch (err) {
     console.error('Visitor membership lookup failed:', err)
     res.status(500).json({ error: String(err) })
@@ -443,6 +461,193 @@ router.get('/visitor/:id/transactions', async (req, res) => {
   }
 })
 
+// ─── TICKET PRICING ──────────────────────────────────────────────────────────
+// GET /api/tickets/pricing?visitDate=YYYY-MM-DD&userId=X
+// Returns all exhibits with the correct price for the user (member vs regular)
+// and remaining capacity for the given visit date.
+router.get('/tickets/pricing', async (req, res) => {
+  const { visitDate, userId } = req.query
+  if (!visitDate) return res.status(400).json({ error: 'visitDate is required' })
+
+  try {
+    // Determine membership status
+    let isMember = false
+    if (userId) {
+      try {
+        const [vrows] = await db.execute(
+          'SELECT VisitorID FROM Visitor WHERE UserID = ? OR VisitorID = ? LIMIT 1',
+          [userId, userId]
+        )
+        if (vrows && vrows.length > 0) {
+          const [mrows] = await db.execute(
+            'SELECT IsExpired, ExpirationDate, Status FROM Membership WHERE VisitorID = ? LIMIT 1',
+            [vrows[0].VisitorID]
+          )
+          if (mrows && mrows.length > 0) {
+            const m = mrows[0]
+            const isExpiredBit = m.IsExpired != null && (Buffer.isBuffer(m.IsExpired) ? m.IsExpired[0] === 1 : m.IsExpired === 1)
+            const isExpiredByDate = m.ExpirationDate && new Date(m.ExpirationDate) < new Date()
+            isMember = (m.Status || 'Active') !== 'Canceled' && !isExpiredBit && !isExpiredByDate
+          }
+        }
+      } catch (_) { /* non-fatal */ }
+    }
+
+    // Fetch exhibits with pricing — daily override takes precedence over base price
+    const [rows] = await db.execute(
+      `SELECT e.ExhibitID, e.ExhibitName, e.Description, e.MaxCapacity,
+              COALESCE(dgap.GeneralAdmissionPrice,    gap.GeneralAdmissionPrice)       AS RegularPrice,
+              COALESCE(dgap.GeneralAdmissionMemberPrice, gap.GeneralAdmissionMemberPrice) AS MemberPrice
+       FROM Exhibit e
+       LEFT JOIN GeneralAdmissionPrices gap       ON gap.ExhibitID  = e.ExhibitID
+       LEFT JOIN DailyGeneralAdmissionPrices dgap ON dgap.ExhibitID = e.ExhibitID AND dgap.Date = ?`,
+      [visitDate]
+    )
+
+    // Units already booked for this visit date per exhibit
+    const [bookedRows] = await db.execute(
+      `SELECT tpi.ExhibitID, SUM(tpi.Quantity) AS Booked
+       FROM TicketPurchaseItem tpi
+       JOIN TicketPurchase tp ON tp.TicketPurchaseID = tpi.TicketPurchaseID
+       WHERE tp.VisitDate = ?
+       GROUP BY tpi.ExhibitID`,
+      [visitDate]
+    )
+    const bookedMap = {}
+    for (const b of bookedRows) bookedMap[b.ExhibitID] = Number(b.Booked)
+
+    const exhibits = rows.map(e => {
+      const booked = bookedMap[e.ExhibitID] || 0
+      const regularPrice = Number(e.RegularPrice || 0)
+      const memberPrice  = Number(e.MemberPrice  || 0)
+      return {
+        ExhibitID:   e.ExhibitID,
+        ExhibitName: e.ExhibitName,
+        Description: e.Description,
+        MaxCapacity: e.MaxCapacity,
+        Booked:      booked,
+        Available:   e.MaxCapacity - booked,
+        RegularPrice: regularPrice,
+        MemberPrice:  memberPrice,
+        Price: isMember ? memberPrice : regularPrice,
+      }
+    })
+
+    res.json({ exhibits, isMember })
+  } catch (err) {
+    console.error('Ticket pricing fetch failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// ─── TICKET PURCHASE ─────────────────────────────────────────────────────────
+// POST /api/tickets/purchase
+// Body: { userId, visitDate, items: [{ exhibitId, qty }] }
+// Validates capacity, calculates prices, inserts TicketPurchase + TicketPurchaseItem rows.
+router.post('/tickets/purchase', async (req, res) => {
+  const { userId, visitDate, items } = req.body || {}
+  if (!visitDate) return res.status(400).json({ error: 'visitDate is required' })
+  if (!items || !Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'items is required' })
+
+  try {
+    // Resolve VisitorID
+    let visitorId = null
+    if (userId) {
+      const [vrows] = await db.execute(
+        'SELECT VisitorID FROM Visitor WHERE UserID = ? OR VisitorID = ? LIMIT 1',
+        [userId, userId]
+      )
+      if (vrows && vrows.length > 0) visitorId = vrows[0].VisitorID
+    }
+    if (!visitorId) {
+      return res.status(404).json({ error: 'Visitor profile not found. Please complete your profile before purchasing tickets.' })
+    }
+
+    // Membership check
+    let isMember = false
+    try {
+      const [mrows] = await db.execute(
+        'SELECT IsExpired, ExpirationDate, Status FROM Membership WHERE VisitorID = ? LIMIT 1',
+        [visitorId]
+      )
+      if (mrows && mrows.length > 0) {
+        const m = mrows[0]
+        const isExpiredBit = m.IsExpired != null && (Buffer.isBuffer(m.IsExpired) ? m.IsExpired[0] === 1 : m.IsExpired === 1)
+        const isExpiredByDate = m.ExpirationDate && new Date(m.ExpirationDate) < new Date()
+        isMember = (m.Status || 'Active') !== 'Canceled' && !isExpiredBit && !isExpiredByDate
+      }
+    } catch (_) { /* non-fatal */ }
+
+    // Validate each item: existence, capacity, price
+    let totalAmount = 0
+    const preparedItems = []
+
+    for (const item of items) {
+      const exhibitId = Number(item.exhibitId || item.ExhibitID)
+      const qty = Number(item.qty || item.Quantity || 1)
+      if (!exhibitId || qty <= 0) continue
+
+      const [erows] = await db.execute(
+        `SELECT e.ExhibitID, e.ExhibitName, e.MaxCapacity,
+                COALESCE(dgap.GeneralAdmissionPrice,       gap.GeneralAdmissionPrice)       AS RegularPrice,
+                COALESCE(dgap.GeneralAdmissionMemberPrice, gap.GeneralAdmissionMemberPrice) AS MemberPrice
+         FROM Exhibit e
+         LEFT JOIN GeneralAdmissionPrices gap       ON gap.ExhibitID  = e.ExhibitID
+         LEFT JOIN DailyGeneralAdmissionPrices dgap ON dgap.ExhibitID = e.ExhibitID AND dgap.Date = ?
+         WHERE e.ExhibitID = ?`,
+        [visitDate, exhibitId]
+      )
+      if (!erows || erows.length === 0) {
+        return res.status(400).json({ error: `Exhibit ${exhibitId} not found` })
+      }
+      const exhibit = erows[0]
+      const unitPrice = isMember ? Number(exhibit.MemberPrice || 0) : Number(exhibit.RegularPrice || 0)
+
+      // Capacity check
+      const [[bookedRow]] = await db.execute(
+        `SELECT COALESCE(SUM(tpi.Quantity), 0) AS Booked
+         FROM TicketPurchaseItem tpi
+         JOIN TicketPurchase tp ON tp.TicketPurchaseID = tpi.TicketPurchaseID
+         WHERE tp.VisitDate = ? AND tpi.ExhibitID = ?`,
+        [visitDate, exhibitId]
+      )
+      const available = exhibit.MaxCapacity - Number(bookedRow.Booked || 0)
+      if (qty > available) {
+        return res.status(409).json({
+          error: `Not enough capacity for "${exhibit.ExhibitName}". Requested ${qty}, available ${available}.`,
+          exhibitId,
+          available,
+        })
+      }
+
+      totalAmount += unitPrice * qty
+      preparedItems.push({ exhibitId, qty, unitPrice, exhibitName: exhibit.ExhibitName })
+    }
+
+    if (preparedItems.length === 0) return res.status(400).json({ error: 'No valid items to purchase' })
+
+    // Insert header row
+    const [tpRes] = await db.execute(
+      'INSERT INTO TicketPurchase (VisitorID, VisitDate, TotalAmount) VALUES (?, ?, ?)',
+      [visitorId, visitDate, totalAmount]
+    )
+    const ticketPurchaseId = tpRes.insertId
+
+    // Insert one detail row per exhibit
+    for (const it of preparedItems) {
+      await db.execute(
+        'INSERT INTO TicketPurchaseItem (TicketPurchaseID, ExhibitID, Quantity, UnitPrice) VALUES (?, ?, ?, ?)',
+        [ticketPurchaseId, it.exhibitId, it.qty, it.unitPrice]
+      )
+    }
+
+    res.json({ success: true, ticketPurchaseId, totalAmount, isMember, items: preparedItems })
+  } catch (err) {
+    console.error('Ticket purchase failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
 // exported at end of file
 
 // Mark a membership as expired (cancel request).
@@ -505,6 +710,25 @@ router.post('/membership/cancel', async (req, res) => {
     return res.status(500).json({ error: 'Failed to cancel membership' })
   } catch (err) {
     console.error('Cancel membership failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// GET /api/exhibits/:id/artifacts
+router.get('/exhibits/:id/artifacts', async (req, res) => {
+  const exhibitId = Number(req.params.id)
+  if (!exhibitId) return res.status(400).json({ error: 'Invalid exhibit id' })
+  try {
+    const [rows] = await db.execute(
+      `SELECT ArtifactID, ExhibitID, Name, Description, EntryDate
+       FROM Artifact
+       WHERE ExhibitID = ?
+       ORDER BY EntryDate DESC, ArtifactID ASC`,
+      [exhibitId]
+    )
+    res.json({ artifacts: rows })
+  } catch (err) {
+    console.error('Fetch artifacts failed:', err)
     res.status(500).json({ error: String(err) })
   }
 })

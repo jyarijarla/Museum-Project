@@ -1,61 +1,87 @@
-:root{
-  --bg:#FCFBF7; /* light cream */
-  --accent:#1e40af; /* blue */
-  --accent-2:#2563eb;
-  --muted:rgba(2,6,23,0.72);
-  --card:#ffffff;
-  --glass: rgba(2,6,23,0.04);
-}
+@import "../Home/Home.css";
 
-*{box-sizing:border-box}
-body{font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, Arial}
+/* ── Dashboard hero banner ── */
+.dash-hero{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:20px;padding:36px 36px 32px;background:linear-gradient(180deg,#eef6ff 0%,var(--bg) 100%);border-bottom:1px solid rgba(2,6,23,0.05)}
+.dash-hero-left{display:flex;align-items:center;gap:20px}
+.dash-avatar{width:68px;height:68px;border-radius:16px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:28px;box-shadow:0 8px 24px rgba(37,99,235,0.2);flex-shrink:0}
+.dash-welcome{margin:4px 0 4px;font-size:clamp(20px,3vw,28px);font-weight:900;letter-spacing:-.5px;color:var(--muted)}
+.dash-welcome-sub{margin:0;font-size:14px;color:rgba(2,6,23,0.5)}
 
-.home-root{min-height:100vh;background:var(--bg);color:var(--muted);display:flex;flex-direction:column}
+.dash-quick-actions{display:flex;gap:10px;flex-wrap:wrap}
 
-.home-header{display:flex;align-items:center;justify-content:space-between;padding:20px 36px}
-.brand{font-weight:700;font-size:20px;color:var(--muted)}
-nav{display:flex;gap:14px;align-items:center}
-.nav-link{color:var(--muted);text-decoration:none;font-weight:600}
-.btn-login{padding:8px 12px;border-radius:10px;background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#fff;text-decoration:none;font-weight:700}
+/* ── Quick action buttons ── */
+.dqa-btn{display:inline-block;padding:9px 18px;border-radius:10px;font-size:14px;font-weight:700;border:none;cursor:pointer;text-decoration:none;transition:opacity .15s,transform .15s;white-space:nowrap}
+.dqa-btn:hover{opacity:.85;transform:translateY(-1px)}
+.dqa-primary{background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#fff;box-shadow:0 4px 14px rgba(37,99,235,0.2)}
+.dqa-ghost{background:transparent;border:1px solid rgba(2,6,23,0.1);color:var(--muted)}
+.dqa-danger{background:transparent;border:1px solid rgba(220,38,38,0.2);color:#dc2626}
+.dqa-danger:hover{background:rgba(220,38,38,0.05)}
+.dqa-btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
 
-.hero{display:grid;grid-template-columns:1fr 420px;gap:32px;align-items:center;padding:80px 36px}
-.hero-inner{max-width:840px}
-.hero-title{font-size:44px;line-height:1.02;margin:0 0 12px;color:var(--muted)}
-.hero-sub{margin:0 0 20px;color:rgba(2,6,23,0.6);font-size:18px}
-.hero-cta{display:flex;gap:12px}
-.btn{display:inline-block;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700}
-.btn.primary{background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#fff;border:1px solid rgba(30,64,175,0.12);box-shadow:0 6px 18px rgba(37,99,235,0.06)}
-.btn.ghost{background:transparent;border:1px solid rgba(2,6,23,0.06);color:var(--muted)}
-.hero-image{height:420px;border-radius:14px;background:linear-gradient(135deg, rgba(37,99,235,0.06), rgba(37,99,235,0.02));box-shadow:0 12px 40px rgba(2,6,23,0.06)}
+/* ── Main layout ── */
+.dash-main{padding:32px 36px 56px;max-width:1200px;margin:0 auto;width:100%;flex:1}
+.dash-loading,.dash-error{padding:40px;text-align:center;color:rgba(2,6,23,0.5);font-size:16px}
+.dash-error{color:#dc2626}
 
-/* Dashboard cards */
-.card{background:linear-gradient(180deg, rgba(255,255,255,0.86), rgba(255,255,255,0.98));border-radius:14px;padding:20px;box-shadow:0 12px 40px rgba(2,6,23,0.06);color:var(--muted)}
-.card-header{display:flex;gap:12px;align-items:center;margin-bottom:10px}
-.card-title{margin:0;font-size:18px;color:var(--accent)}
-.card-sub{color:rgba(2,6,23,0.5);font-size:13px}
-.card-body{color:var(--muted);font-size:15px}
+.dash-grid{display:grid;grid-template-columns:1fr 280px;gap:24px;align-items:start}
+.dash-col-main{display:flex;flex-direction:column;gap:20px}
+.dash-col-side{display:flex;flex-direction:column;gap:16px;position:sticky;top:84px}
 
-.avatar{width:64px;height:64px;border-radius:14px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;box-shadow:0 8px 20px rgba(37,99,235,0.12)}
+/* ── Cards ── */
+.dash-card{background:var(--card);border-radius:16px;padding:22px 24px;border:1px solid rgba(2,6,23,0.05);box-shadow:0 4px 20px rgba(2,6,23,0.05)}
+.dash-card-header{display:flex;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid rgba(2,6,23,0.05)}
+.dash-card-icon-wrap{width:38px;height:38px;border-radius:10px;background:rgba(37,99,235,0.07);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.dash-card-title{margin:0;font-size:17px;font-weight:800;color:var(--muted)}
+.dash-card-actions{margin-top:16px;padding-top:14px;border-top:1px solid rgba(2,6,23,0.05)}
 
-.account-card .card-body p{margin:8px 0}
-.profile-card .card-body p{margin:6px 0}
-.membership-card .card-body p{margin:6px 0}
+/* ── Definition list ── */
+.dash-dl{display:flex;flex-direction:column;gap:2px;margin:0}
+.dash-dl-row{display:flex;align-items:baseline;gap:12px;padding:8px 0;border-bottom:1px solid rgba(2,6,23,0.04)}
+.dash-dl-row:last-child{border-bottom:none}
+.dash-dl-row dt{min-width:110px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:rgba(2,6,23,0.35);flex-shrink:0}
+.dash-dl-row dd{margin:0;font-size:14px;color:var(--muted);font-weight:600}
 
-/* Actions column */
-.actions-card .actions-body{display:flex;flex-direction:column;gap:10px}
-.actions-card .btn{width:100%}
+/* ── Badges / chips ── */
+.dash-plan-badge{background:rgba(37,99,235,0.07);border:1px solid rgba(37,99,235,0.12);color:var(--accent-2);font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px}
+.dash-status-chip{font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px}
 
-/* Purchase history */
-.history-card input, .history-card select{border:1px solid rgba(2,6,23,0.06);padding:8px 10px;border-radius:8px}
-.history-card .muted{color:rgba(2,6,23,0.5);font-size:13px}
-.history-card .history-list{max-height:320px;overflow:auto}
-.history-card .history-item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f3f3f3}
-.history-card .history-item .meta{color:rgba(2,6,23,0.6);font-size:13px}
+/* ── History ── */
+.dash-history-controls{display:flex;gap:8px;margin-bottom:14px}
+.dash-input{flex:1;padding:9px 12px;border-radius:8px;border:1px solid rgba(2,6,23,0.1);font-size:14px;background:var(--bg);color:var(--muted);outline:none}
+.dash-input:focus{border-color:var(--accent-2);box-shadow:0 0 0 3px rgba(37,99,235,0.07)}
+.dash-select{padding:9px 12px;border-radius:8px;border:1px solid rgba(2,6,23,0.1);font-size:14px;background:var(--bg);color:var(--muted)}
+.dash-history-list{max-height:340px;overflow-y:auto;display:flex;flex-direction:column}
+.dash-history-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid rgba(2,6,23,0.04)}
+.dash-history-row:last-child{border-bottom:none}
+.dash-history-info{display:flex;flex-direction:column;gap:2px}
+.dash-history-name{font-weight:700;font-size:14px;color:var(--muted)}
+.dash-history-meta{font-size:12px;color:rgba(2,6,23,0.4)}
+.dash-history-price{font-weight:900;font-size:15px;color:var(--accent)}
 
-/* subtle responsive tweaks */
+.dash-empty-note{color:rgba(2,6,23,0.45);font-size:14px;margin:0}
+.dash-empty-note a{color:var(--accent-2);font-weight:700}
+
+/* ── Sidebar account card ── */
+.dash-account-card{display:flex;flex-direction:column;align-items:center;text-align:center;gap:4px;padding:24px}
+.dash-sidebar-avatar{width:72px;height:72px;border-radius:18px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:30px;box-shadow:0 8px 24px rgba(37,99,235,0.18);margin-bottom:8px}
+.dash-sidebar-name{font-weight:800;font-size:16px;color:var(--muted)}
+.dash-sidebar-role{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--accent-2);background:rgba(37,99,235,0.07);border:1px solid rgba(37,99,235,0.12);padding:3px 10px;border-radius:999px;margin:4px 0}
+.dash-sidebar-email{font-size:13px;color:rgba(2,6,23,0.45)}
+
+.dash-side-actions{display:flex;flex-direction:column;gap:8px}
+.dash-side-actions .dqa-btn{width:100%}
+
 @media (max-width:920px){
-  .card{padding:14px}
-  .avatar{width:56px;height:56px}
+  .dash-grid{grid-template-columns:1fr}
+  .dash-col-side{position:static}
+  .dash-hero{padding:24px 20px}
+  .dash-main{padding:24px 20px 40px}
+}
+@media (max-width:520px){
+  .dash-hero-left{flex-direction:column;align-items:flex-start}
+  .dash-quick-actions{width:100%}
+  .dash-dl-row{flex-direction:column;gap:2px}
+  .dash-dl-row dt{min-width:unset}
 }
 
 .features{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;padding:36px}

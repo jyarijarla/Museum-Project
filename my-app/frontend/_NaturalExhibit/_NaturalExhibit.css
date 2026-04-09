@@ -1,21 +1,28 @@
 @import "../Home/Home.css";
+@import "../_SpaceExhibit/_SpaceExhibit.css";
 
-.natural-hero{background:linear-gradient(180deg, rgba(34,197,94,0.03), rgba(34,197,94,0.02));}
-.natural-visual{background:linear-gradient(135deg,#d1f7e6,#e8fbf0);border-radius:14px;height:420px}
+/* ── Natural History theme ── */
+.natural-hero { background: linear-gradient(135deg, rgba(34,197,94,0.04), rgba(16,185,129,0.03)); }
+.natural-visual {
+  background:
+    radial-gradient(circle at 35% 40%, rgba(34,197,94,0.28), transparent 55%),
+    radial-gradient(circle at 72% 65%, rgba(16,185,129,0.2), transparent 50%),
+    linear-gradient(135deg, #d1f7e6, #e8fbf0);
+}
 
-.exhibit-main{padding:36px}
-.card-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
-.exhibit-card{background:var(--card);padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.04);text-align:center}
-.card-image{height:160px;border-radius:10px;margin-bottom:12px;background-size:cover;background-position:center}
-.biome.rainforest{background:linear-gradient(180deg,#6abf6a,#2f8a4a)}
-.biome.desert{background:linear-gradient(180deg,#f2d49c,#d19a4a)}
-.biome.ocean{background:linear-gradient(180deg,#7fcbe6,#2b8fb6)}
+/* Leaf decorations in hero */
+.nat-leaf {
+  position: absolute;
+  font-size: 3.5rem;
+  opacity: 0.35;
+  line-height: 1;
+}
+.leaf-1 { top: 20%; left: 20%; transform: rotate(-20deg); font-size: 5rem; }
+.leaf-2 { top: 55%; left: 58%; transform: rotate(12deg); font-size: 3rem; }
+.leaf-3 { top: 10%; left: 68%; transform: rotate(-8deg); font-size: 4rem; }
 
-.timeline{background:var(--card);padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.04)}
-.fossil-item{padding:12px 0;border-bottom:1px solid rgba(2,6,23,0.04)}
-
-.gallery-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-.gallery-item{height:140px;border-radius:10px;background:linear-gradient(135deg, rgba(34,197,94,0.06), rgba(2,6,23,0.02));box-shadow:0 8px 20px rgba(2,6,23,0.04)}
-
-@media (max-width:920px){.card-grid{grid-template-columns:1fr 1fr}.gallery-grid{grid-template-columns:1fr 1fr}}
-@media (max-width:520px){.card-grid{grid-template-columns:1fr}.gallery-grid{grid-template-columns:1fr}.hero-image{height:200px}}
+.natural-about { background: linear-gradient(135deg, rgba(34,197,94,0.05), rgba(16,185,129,0.04)); }
+.natural-about .ex-stat-num { color: #16a34a; }
+.natural-fact { border-top-color: #22c55e; }
+.natural-artifact .artifact-accent-bar { background: linear-gradient(90deg, #16a34a, #059669); }
+.natural-artifact .artifact-id-pill { background: rgba(22,163,74,0.09); color: #16a34a; }

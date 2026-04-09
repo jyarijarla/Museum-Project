@@ -1,21 +1,27 @@
 @import "../Home/Home.css";
+@import "../_SpaceExhibit/_SpaceExhibit.css";
 
-.ancient-hero{background:linear-gradient(180deg, rgba(245,229,186,0.04), rgba(245,229,186,0.02));}
-.ancient-visual{background:linear-gradient(135deg,#efe0c6,#f7efe3);border-radius:14px;height:420px}
+/* ── Ancient Civilizations theme ── */
+.ancient-hero { background: linear-gradient(135deg, rgba(245,158,11,0.04), rgba(180,83,9,0.03)); }
+.ancient-visual {
+  background:
+    radial-gradient(circle at 38% 42%, rgba(245,158,11,0.28), transparent 55%),
+    radial-gradient(circle at 70% 65%, rgba(217,119,6,0.2), transparent 50%),
+    linear-gradient(135deg, #fef3c7, #fde8c8);
+}
 
-.exhibit-main{padding:36px}
-.card-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
-.exhibit-card{background:var(--card);padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.04);text-align:center}
-.card-image{height:160px;border-radius:10px;margin-bottom:12px;background-size:cover;background-position:center}
-.artifact.pottery{background:linear-gradient(180deg,#c9a08a,#a77153)}
-.artifact.sculpture{background:linear-gradient(180deg,#d6c7be,#b89a8b)}
-.artifact.inscription{background:linear-gradient(180deg,#e9ddc9,#cdbb9a)}
+/* Decorative elements in hero */
+.ancient-deco {
+  position: absolute;
+  opacity: 0.3;
+  line-height: 1;
+}
+.deco-1 { font-size: 5rem; top: 18%; left: 18%; transform: rotate(-15deg); }
+.deco-2 { font-size: 3.5rem; top: 55%; left: 60%; transform: rotate(8deg); }
+.deco-3 { font-size: 4rem; top: 12%; left: 66%; transform: rotate(-5deg); }
 
-.timeline{background:var(--card);padding:18px;border-radius:12px;box-shadow:0 8px 30px rgba(2,6,23,0.04);list-style:none}
-.timeline li{padding:8px 0;border-bottom:1px solid rgba(2,6,23,0.04)}
-
-.gallery-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-.gallery-item{height:140px;border-radius:10px;background:linear-gradient(135deg, rgba(245,229,186,0.06), rgba(2,6,23,0.02));box-shadow:0 8px 20px rgba(2,6,23,0.04)}
-
-@media (max-width:920px){.card-grid{grid-template-columns:1fr 1fr}.gallery-grid{grid-template-columns:1fr 1fr}}
-@media (max-width:520px){.card-grid{grid-template-columns:1fr}.gallery-grid{grid-template-columns:1fr}.hero-image{height:200px}}
+.ancient-about { background: linear-gradient(135deg, rgba(245,158,11,0.06), rgba(180,83,9,0.04)); }
+.ancient-about .ex-stat-num { color: #b45309; }
+.ancient-fact { border-top-color: #d97706; }
+.ancient-artifact .artifact-accent-bar { background: linear-gradient(90deg, #b45309, #d97706); }
+.ancient-artifact .artifact-id-pill { background: rgba(180,83,9,0.09); color: #b45309; }

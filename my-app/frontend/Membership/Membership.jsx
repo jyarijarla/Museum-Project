@@ -10,12 +10,13 @@ export default function Membership(){
   const { user, logout } = useAuth()
   const { cart, addItem, removeItem } = useCart()
   const [currentPlanId, setCurrentPlanId] = useState(null)
+  const [currentMembership, setCurrentMembership] = useState(null)
   const displayName = user?.Username || user?.username || null
 
   const handleLogout = ()=>{ logout(); navigate('/') }
 
   useEffect(()=>{
-    if(!user) { setCurrentPlanId(null); return }
+    if(!user) { setCurrentPlanId(null); setCurrentMembership(null); return }
     const apiBase = import.meta.env.VITE_API_BASE_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:5000' : '')
     const uid = user.userId || user.UserID || user.id || user.userID
     if(!uid) return
@@ -24,13 +25,16 @@ export default function Membership(){
       return r.json()
     }).then(js=>{
       if(js && js.membership){
-        const plan = js.membership.MembershipTypeID || js.membership.PlanID || js.membership.PlanId || js.membership.planId || null
+        const plan = js.membership.MembershipTypeID || js.membership.PlanID || null
         setCurrentPlanId(plan)
+        setCurrentMembership(js.membership)
       } else {
         setCurrentPlanId(null)
+        setCurrentMembership(null)
       }
     }).catch(()=>{
       setCurrentPlanId(null)
+      setCurrentMembership(null)
     })
   },[user])
 
@@ -41,6 +45,7 @@ export default function Membership(){
         <nav>
           <Link className="nav-link" to="/">Home</Link>
           <Link className="nav-link" to="/exhibits">Exhibits</Link>
+          <Link className="nav-link" to="/tickets">Tickets</Link>
           <Link className="nav-link" to="/membership">Membership</Link>
           <Link className="nav-link" to="/giftshop">Gift Shop</Link>
           
@@ -68,7 +73,11 @@ export default function Membership(){
             { id: 3, title: 'Patron', price: 350, benefits: ['All family benefits','Private tours','Special recognition'] }
           ].map(plan=>{
             const existing = cart.find(i=> i.type === 'membership')
-            const isCurrent = (currentPlanId ? Number(currentPlanId) === Number(plan.id) : false) || (!!existing && existing.id === plan.id)
+            // Only treat as current if the DB record is Active for this plan
+            const isActiveMembership = currentMembership && currentMembership.computedStatus === 'Active'
+            const isCurrent = (isActiveMembership && Number(currentPlanId) === Number(plan.id)) || (!!existing && existing.id === plan.id && !currentMembership)
+            // Whether this plan was previously held but is now expired/canceled
+            const isPrevious = currentMembership && currentMembership.computedStatus !== 'Active' && Number(currentPlanId) === Number(plan.id)
 
             const onChoose = async ()=>{
               if(!user){
@@ -89,6 +98,7 @@ export default function Membership(){
                   const js = await resp.json()
                   if(js && js.success){
                     setCurrentPlanId(null)
+                    setCurrentMembership(null)
                     removeItem(plan.id,'membership')
                     alert('Membership canceled')
                   } else {
@@ -108,20 +118,33 @@ export default function Membership(){
             }
 
             return (
-              <article key={plan.id} className={`membership-card ${plan.featured? 'featured':''} ${isCurrent? 'current':''}`}>
+              <article key={plan.id} className={`membership-card ${plan.featured? 'featured':''} ${isCurrent? 'current':''} ${isPrevious? 'previous':''}`}>
                 <div className="card-top">
                   <h3>{plan.title}</h3>
-                  <div className="price">${plan.price}</div>
+                  <div className="price">${plan.price}<span style={{fontSize:'0.55em',fontWeight:400}}>/yr</span></div>
                 </div>
                 <ul className="benefits">
                   {plan.benefits.map((b,idx)=>(<li key={idx}>{b}</li>))}
                 </ul>
+                {isCurrent && currentMembership && (
+                  <div className="membership-meta">
+                    <span>Active since {new Date(currentMembership.StartDate).toLocaleDateString()}</span>
+                    <span>Renews {new Date(currentMembership.ExpirationDate).toLocaleDateString()}</span>
+                  </div>
+                )}
+                {isPrevious && currentMembership && (
+                  <div className="membership-meta" style={{color:'#e07b39'}}>
+                    <span style={{fontWeight:600}}>{currentMembership.computedStatus}</span>
+                    {currentMembership.ExpirationDate && <span>Expired {new Date(currentMembership.ExpirationDate).toLocaleDateString()}</span>}
+                  </div>
+                )}
                 <div className="card-actions">
                   <button className={`btn ${isCurrent? 'ghost':'primary'}`} onClick={onChoose}>
-                    {isCurrent? 'Cancel Plan' : 'Choose'}
+                    {isCurrent ? 'Cancel Plan' : isPrevious ? 'Renew Plan' : 'Choose'}
                   </button>
                 </div>
                 {isCurrent && <div className="current-badge">Current</div>}
+                {isPrevious && <div className="current-badge" style={{background:'#e07b39'}}>{currentMembership.computedStatus}</div>}
               </article>
             )
           })}

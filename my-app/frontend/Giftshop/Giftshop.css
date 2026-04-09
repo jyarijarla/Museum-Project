@@ -16,8 +16,10 @@
 .gift-card{background:var(--card);border-radius:16px;border:1px solid rgba(2,6,23,0.05);box-shadow:0 4px 20px rgba(2,6,23,0.05);display:flex;flex-direction:column;overflow:hidden;transition:transform .2s ease,box-shadow .2s ease}
 .gift-card:hover{transform:translateY(-5px);box-shadow:0 16px 48px rgba(2,6,23,0.1)}
 
-.gift-image{height:150px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.gift-image-icon{font-size:44px;filter:drop-shadow(0 4px 8px rgba(0,0,0,0.08))}
+/* ── Product image (photo) ── */
+.gift-image{height:160px;overflow:hidden;flex-shrink:0;background:#f1f5f9}
+.gift-image-photo{width:100%;height:100%;object-fit:cover;display:block;transition:transform .35s ease}
+.gift-card:hover .gift-image-photo{transform:scale(1.06)}
 
 .gift-details{padding:14px 16px 8px;flex:1;display:flex;flex-direction:column;gap:4px}
 .gift-name{margin:0;font-size:15px;font-weight:800;color:var(--muted);line-height:1.3}

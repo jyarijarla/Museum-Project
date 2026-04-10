@@ -34,11 +34,12 @@ export default function Home(){
       </header>
 
       {/* ── Hero ── */}
-      <section className="hero">
+      <section className="hero hero-fullbg" style={{backgroundImage:'url(/museum-hero.jpg)'}}>
+        <div className="hero-bg-overlay" />
         <div className="hero-inner">
           <div className="hero-eyebrow">Welcome to City Museum</div>
           <h1 className="hero-title">Discover the stories behind every artifact</h1>
-          <p className="hero-sub">Explore rotating exhibits, world-class collections, and immersive experiences for all ages.</p>
+          <p className="hero-sub">Explore inspiring exhibits, world-class collections, and immersive experiences for all ages.</p>
           <div className="hero-cta">
             <Link className="btn primary" to="/tickets">Buy Tickets</Link>
             <Link className="btn ghost" to="/exhibits">See Exhibits</Link>
@@ -50,14 +51,6 @@ export default function Home(){
             <div className="hero-stat-div" />
             <div className="hero-stat"><span className="hero-stat-num">1924</span><span className="hero-stat-label">Founded</span></div>
           </div>
-        </div>
-        <div className="hero-image" aria-hidden="true">
-          <img
-            src="https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/British_Museum_from_NE_2.JPG/1280px-British_Museum_from_NE_2.JPG"
-            alt="Museum building"
-            className="hero-photo"
-            onError={(e)=>{ e.target.style.display='none' }}
-          />
         </div>
       </section>
 
@@ -75,7 +68,7 @@ export default function Home(){
           <div className="about-content">
             <div className="section-eyebrow">Our Story</div>
             <h2>A Century of Discovery</h2>
-            <p className="muted">Founded in 1924, the City Museum has grown from a small collection of artifacts to a vibrant cultural institution. We collect, preserve, and share the stories of our city and the wider world.</p>
+            <p className="muted">Founded in 2004, the City Museum has grown from a small collection of artifacts to a vibrant cultural institution. We collect, preserve, and share the stories of our city and the wider world.</p>
             <p className="muted">Our mission is to inspire curiosity through exhibits, education, and community programs — providing learning opportunities for visitors of all ages.</p>
             <div className="about-cards">
               <div className="about-card">

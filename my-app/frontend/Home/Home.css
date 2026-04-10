@@ -23,6 +23,20 @@ nav{display:flex;gap:14px;align-items:center}
 
 /* ── Hero ── */
 .hero{display:grid;grid-template-columns:1fr 440px;gap:32px;align-items:center;padding:60px 36px 56px;background:linear-gradient(180deg,#eef6ff 0%,var(--bg) 100%)}
+.hero-fullbg{display:flex;align-items:flex-end;padding:80px 56px 56px;min-height:520px;background-size:cover;background-position:center;background-repeat:no-repeat;position:relative;grid-template-columns:unset;animation:heroFadeIn 1.2s ease forwards}
+.hero-bg-overlay{position:absolute;inset:0;background:linear-gradient(to right, rgba(2,6,23,0.72) 0%, rgba(2,6,23,0.45) 60%, rgba(2,6,23,0.15) 100%);pointer-events:none}
+.hero-fullbg .hero-inner{position:relative;z-index:3;max-width:620px}
+.hero-fullbg::before{content:'';position:absolute;top:0;left:0;right:0;height:80px;background:linear-gradient(to bottom,#FCFBF7,transparent);pointer-events:none;z-index:2}
+.hero-fullbg::after{content:'';position:absolute;bottom:0;left:0;right:0;height:100px;background:linear-gradient(to bottom,transparent,#FCFBF7);pointer-events:none;z-index:2}
+.hero-fullbg .hero-title{color:#fff}
+.hero-fullbg .hero-sub{color:rgba(255,255,255,0.82)}
+.hero-fullbg .hero-eyebrow{color:#93c5fd;background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.2)}
+.hero-fullbg .btn.ghost{border-color:rgba(255,255,255,0.35);color:#fff}
+.hero-fullbg .btn.ghost:hover{background:rgba(255,255,255,0.1)}
+.hero-fullbg .hero-stats{background:rgba(255,255,255,0.12);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.18)}
+.hero-fullbg .hero-stat-num{color:#fff}
+.hero-fullbg .hero-stat-label{color:rgba(255,255,255,0.6)}
+.hero-fullbg .hero-stat-div{background:rgba(255,255,255,0.25)}
 .hero-inner{max-width:560px}
 .hero-eyebrow{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-2);background:rgba(37,99,235,0.07);border:1px solid rgba(37,99,235,0.12);padding:4px 12px;border-radius:999px;margin-bottom:16px}
 .hero-title{font-size:clamp(26px,4vw,44px);line-height:1.1;margin:0 0 14px;color:var(--muted);font-weight:900;letter-spacing:-1px}
@@ -47,7 +61,7 @@ nav{display:flex;gap:14px;align-items:center}
 .section-eyebrow{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-2);background:rgba(37,99,235,0.07);border:1px solid rgba(37,99,235,0.12);padding:4px 12px;border-radius:999px;margin-bottom:12px}
 
 /* ── About ── */
-.about-section{padding:56px 36px;border-top:1px solid rgba(2,6,23,0.04)}
+.about-section{padding:56px 36px;border-top:1px solid rgba(2,6,23,0.04);background:linear-gradient(180deg,var(--bg) calc(100% - 50px),#fff 100%)}
 .about-grid{display:grid;grid-template-columns:420px 1fr;gap:40px;align-items:start;max-width:1100px;margin:0 auto}
 .about-image{border-radius:16px;overflow:hidden;box-shadow:0 16px 48px rgba(2,6,23,0.08);height:320px;background:linear-gradient(135deg,#d8e6ff,#b8d0f8)}
 .about-photo{width:100%;height:100%;object-fit:cover;display:block}
@@ -70,8 +84,8 @@ nav{display:flex;gap:14px;align-items:center}
 .band-media:hover .band-photo{transform:scale(1.04)}
 
 .band-exhibits{background:#fff}
-.band-membership{background:linear-gradient(180deg,#eef6ff,#e6f0ff)}
-.band-giftshop{background:#fff8f0}
+.band-membership{background:linear-gradient(180deg,#fff 0%,#eef6ff 60px,#e6f0ff 100%)}
+.band-giftshop{background:linear-gradient(180deg,#e6f0ff 0%,#fff8f0 60px,#fff8f0 100%)}
 
 .band-pills{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
 .band-pill{background:rgba(37,99,235,0.07);border:1px solid rgba(37,99,235,0.12);color:var(--accent-2);font-size:12px;font-weight:600;padding:4px 12px;border-radius:999px}
@@ -81,7 +95,7 @@ nav{display:flex;gap:14px;align-items:center}
 .tier-patron{background:rgba(196,127,0,0.08);border-color:rgba(196,127,0,0.18);color:#92600a}
 
 /* ── Footer ── */
-.home-footer{border-top:1px solid rgba(2,6,23,0.05);padding:28px 36px;background:var(--bg)}
+.home-footer{border-top:1px solid rgba(2,6,23,0.05);padding:28px 36px;background:linear-gradient(180deg,#fff8f0 0%,var(--bg) 60px,var(--bg) 100%)}
 .footer-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px}
 .footer-brand{font-weight:800;font-size:16px;color:var(--muted)}
 .footer-links{display:flex;gap:20px}
@@ -105,4 +119,9 @@ nav{display:flex;gap:14px;align-items:center}
   .home-header{padding:14px 18px}
   .footer-inner{flex-direction:column;text-align:center}
   .footer-links{flex-wrap:wrap;justify-content:center}
+}
+
+@keyframes heroFadeIn{
+  from{opacity:0;transform:scale(1.03)}
+  to{opacity:1;transform:scale(1)}
 }

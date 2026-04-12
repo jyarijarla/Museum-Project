@@ -734,3 +734,92 @@ router.get('/exhibits/:id/artifacts', async (req, res) => {
 })
 
 export default router;
+
+// retrieves past ticket purchases for a visitor, including exhibit names, prices, quantities, and purchase/visit dates.
+router.get('/visitor/:id/ticket-purchases', async (req, res) => {
+  const { id } = req.params
+  try {
+    // Resolve VisitorID
+    const [vrows] = await db.execute(
+      'SELECT VisitorID FROM Visitor WHERE UserID = ? OR VisitorID = ? LIMIT 1',
+      [id, id]
+    )
+    if (!vrows || vrows.length === 0) return res.status(404).json({ error: 'Visitor not found' })
+    const visitorId = vrows[0].VisitorID
+
+    // Fetch all ticket purchases with their items and exhibit names
+    const [rows] = await db.execute(
+      `SELECT 
+        tp.TicketPurchaseID,
+        tp.PurchaseDate,
+        tp.VisitDate,
+        tp.TotalAmount,
+        tp.Status AS PurchaseStatus,
+        tpi.TicketPurchaseItemID,
+        tpi.Quantity,
+        tpi.UnitPrice,
+        tpi.Subtotal,
+        e.ExhibitName,
+        t.VisitTime,
+        t.Status AS TicketStatus
+      FROM TicketPurchase tp
+      JOIN TicketPurchaseItem tpi ON tp.TicketPurchaseID = tpi.TicketPurchaseID
+      JOIN Exhibit e ON tpi.ExhibitID = e.ExhibitID
+      LEFT JOIN Ticket t ON tp.TicketPurchaseID = t.TicketPurchaseID
+      WHERE tp.VisitorID = ?
+      ORDER BY tp.PurchaseDate DESC`,
+      [visitorId]
+    )
+
+    // Group by TicketPurchaseID
+    const map = {}
+    for (const r of rows) {
+      if (!map[r.TicketPurchaseID]) {
+        map[r.TicketPurchaseID] = {
+          TicketPurchaseID: r.TicketPurchaseID,
+          PurchaseDate: r.PurchaseDate,
+          VisitDate: r.VisitDate,
+          TotalAmount: r.TotalAmount,
+          PurchaseStatus: r.PurchaseStatus,
+          VisitTime: r.VisitTime,
+          TicketStatus: r.TicketStatus,
+          items: []
+        }
+      }
+      map[r.TicketPurchaseID].items.push({
+        TicketPurchaseItemID: r.TicketPurchaseItemID,
+        ExhibitName: r.ExhibitName,
+        Quantity: r.Quantity,
+        UnitPrice: r.UnitPrice,
+        Subtotal: r.Subtotal
+      })
+    }
+
+    res.json({ ticketPurchases: Object.values(map) })
+  } catch (err) {
+    console.error('Fetch ticket purchases failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// POST cancel a ticket purchase
+router.post('/visitor/ticket-purchases/cancel', async (req, res) => {
+  const { ticketPurchaseId } = req.body
+  if (!ticketPurchaseId) return res.status(400).json({ error: 'ticketPurchaseId is required' })
+  try {
+    // Update TicketPurchase status
+    await db.execute(
+      'UPDATE TicketPurchase SET Status = ? WHERE TicketPurchaseID = ?',
+      ['Cancelled', ticketPurchaseId]
+    )
+    // Update linked Ticket status
+    await db.execute(
+      'UPDATE Ticket SET Status = ? WHERE TicketPurchaseID = ?',
+      ['Cancelled', ticketPurchaseId]
+    )
+    res.json({ success: true, message: 'Ticket purchase cancelled successfully' })
+  } catch (err) {
+    console.error('Cancel ticket purchase failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})

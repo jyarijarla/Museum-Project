@@ -15,6 +15,7 @@ export default function Visitor(){
   const [sort, setSort] = useState('recent')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [ticketPurchases, setTicketPurchases] = useState([])
 
   useEffect(()=>{
     if(!user){
@@ -70,6 +71,16 @@ export default function Visitor(){
         }catch(e){
           console.warn('Failed to load transactions', e)
         }
+        // Fetch ticket purchase history
+        try {
+          const tpRes = await fetch(`${apiBase}/api/visitor/${uid}/ticket-purchases`)
+          if (tpRes.ok) {
+            const tpJson = await tpRes.json()
+            setTicketPurchases(tpJson.ticketPurchases || [])
+          }
+        } catch (e) {
+          console.warn('Failed to load ticket purchases', e)
+        }
       }catch(e){
         console.error('Dashboard fetch failed', e)
         setError('Failed to load account data')
@@ -90,7 +101,37 @@ export default function Visitor(){
 
   const memberStatusBg = membership?.computedStatus === 'Active'
     ? 'rgba(22,163,74,0.08)' : membership?.computedStatus === 'Canceled' ? 'rgba(107,114,128,0.08)' : 'rgba(220,38,38,0.08)'
-
+  const handleCancelTicket = async (ticketPurchaseId) => {
+  if (!confirm('Are you sure you want to cancel this ticket purchase?')) return
+  try {
+    const apiBase = import.meta.env.VITE_API_BASE_URL || 
+      (typeof window !== 'undefined' && 
+      (window.location.hostname === 'localhost' || 
+       window.location.hostname === '127.0.0.1') 
+        ? 'http://localhost:5000' : '')
+    const resp = await fetch(`${apiBase}/api/visitor/ticket-purchases/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ticketPurchaseId })
+    })
+    if (!resp.ok) { alert('Cancel failed: ' + await resp.text()); return }
+    const js = await resp.json()
+    if (js?.success) {
+      // Update to reflect cancellation
+      setTicketPurchases(prev => prev.map(tp =>
+        tp.TicketPurchaseID === ticketPurchaseId
+          ? { ...tp, PurchaseStatus: 'Cancelled', TicketStatus: 'Cancelled' }
+          : tp
+      ))
+        alert('Ticket purchase cancelled successfully')
+      } else {
+        alert('Cancel failed')
+      }
+    } catch (e) {
+      console.error(e)
+      alert('Cancel failed')
+    }
+  }
   return (
     <div className="home-root">
       <header className="home-header">
@@ -205,7 +246,65 @@ export default function Visitor(){
                   <p className="dash-empty-note">No active membership. <Link to="/membership">View plans →</Link></p>
                 )}
               </div>
-
+              {/* Ticket Purchase History card */}
+              <div className="dash-card">
+                <div className="dash-card-header">
+                  <div className="dash-card-icon-wrap">🎟️</div>
+                  <h2 className="dash-card-title">Ticket Purchase History</h2>
+                </div>
+                <div className="dash-history-list">
+                  {ticketPurchases.length > 0 ? (
+                    ticketPurchases.map(tp => (
+                      <div key={tp.TicketPurchaseID} className="dash-history-row">
+                        <div className="dash-history-info">
+                          <span className="dash-history-name">
+                            Visit: {tp.VisitDate 
+                              ? new Date(tp.VisitDate).toLocaleDateString() 
+                              : '—'}
+                          </span>
+                          <span className="dash-history-meta">
+                            Purchased: {tp.PurchaseDate 
+                              ? new Date(tp.PurchaseDate).toLocaleDateString() 
+                              : '—'} ·{' '}
+                            {tp.items.map(it => 
+                              `${it.ExhibitName} x${it.Quantity}`
+                            ).join(', ')} ·{' '}
+                            <span style={{
+                              color: tp.PurchaseStatus === 'Active' 
+                                ? '#16a34a' 
+                                : tp.PurchaseStatus === 'Cancelled' 
+                                  ? '#dc2626' 
+                                  : '#6b7280',
+                              fontWeight: 700
+                            }}>
+                              {tp.PurchaseStatus}
+                            </span>
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                          <span className="dash-history-price">
+                            ${Number(tp.TotalAmount || 0).toFixed(2)}
+                          </span>
+                          {tp.PurchaseStatus === 'Active' && (
+                            <button
+                              className="dqa-btn dqa-danger"
+                              style={{ fontSize: 11, padding: '3px 10px' }}
+                              onClick={() => handleCancelTicket(tp.TicketPurchaseID)}
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="dash-empty-note">
+                      No ticket purchases found.{' '}
+                      <Link to="/tickets">Buy tickets →</Link>
+                    </p>
+                  )}
+                </div>
+              </div>
               {/* Purchase history card */}
               <div className="dash-card">
                 <div className="dash-card-header">

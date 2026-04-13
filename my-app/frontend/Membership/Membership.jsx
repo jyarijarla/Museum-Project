@@ -4,6 +4,7 @@ import './Membership.css'
 import { useAuth } from '../../src/AuthContext.jsx'
 import ProfileMenu from '../components/ProfileMenu.jsx'
 import { useCart } from '../../src/CartContext.jsx'
+import { API_BASE } from '../../src/api.js'
 
 // Prices are not stored in the DB — kept here
 const PLAN_PRICES = { 1: 45, 2: 120, 3: 350 }
@@ -21,7 +22,7 @@ export default function Membership(){
   const toastTimer = useRef(null)
   const displayName = user?.Username || user?.username || null
 
-  const apiBase = import.meta.env.VITE_API_BASE_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:5000' : '')
+  const apiBase = API_BASE()
 
   const showToast = (text, color = '#10b981') => {
     if (toastTimer.current) clearTimeout(toastTimer.current)

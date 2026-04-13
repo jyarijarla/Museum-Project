@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { API_BASE } from '../../src/api.js'
 
 export default function CreateAccountModal({ onClose }){
   const [form, setForm] = useState({
@@ -32,7 +33,7 @@ export default function CreateAccountModal({ onClose }){
 
     // ✅ REPLACED localStorage WITH BACKEND CALL
     try {
-      const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+      const apiBase = API_BASE()
       const res = await fetch(`${apiBase}/api/signup`, {
         method: "POST",
         headers: {

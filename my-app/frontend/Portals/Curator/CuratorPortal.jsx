@@ -3,13 +3,14 @@ import { Link } from 'react-router-dom'
 import './CuratorPortal.css'
 import ProfileMenu from '../../components/ProfileMenu.jsx'
 import { useAuth } from '../../../src/AuthContext.jsx'
+import { API_BASE } from '../../../src/api.js'
 
 const EXHIBIT_ICONS = ['🚀', '🦕', '🏛️', '🔭', '🌿', '⚗️']
 const ACCENT_COLORS = ['#2563eb', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#dc2626']
 
 export default function CuratorPortal() {
   const { user } = useAuth()
-  const apiBase = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:5000' : ''
+  const apiBase = API_BASE()
 
   const [activeTab, setActiveTab] = useState('overview')
 

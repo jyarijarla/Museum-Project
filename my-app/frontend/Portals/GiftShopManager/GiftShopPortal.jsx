@@ -3,12 +3,11 @@ import { Link } from 'react-router-dom'
 import './GiftShopPortal.css'
 import ProfileMenu from '../../components/ProfileMenu.jsx'
 import { useAuth } from '../../../src/AuthContext.jsx'
-
-
+import { API_BASE } from '../../../src/api.js'
 
 export default function GiftShopPortal() {
   const { user } = useAuth()
-  const apiBase = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:5000' : ''
+  const apiBase = API_BASE()
 
   // ── Shared ──
   const [metrics, setMetrics]   = useState(null)

@@ -3,13 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import './Tickets.css'
 import { useAuth } from '../../src/AuthContext.jsx'
 import ProfileMenu from '../components/ProfileMenu.jsx'
-
-const API_BASE = () =>
-  import.meta.env.VITE_API_BASE_URL ||
-  (typeof window !== 'undefined' &&
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-    ? 'http://localhost:5000'
-    : '')
+import { API_BASE } from '../../src/api.js'
 
 const TODAY = new Date().toISOString().split('T')[0]
 

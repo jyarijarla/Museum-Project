@@ -4,6 +4,7 @@ import './Giftshop.css'
 import { useAuth } from '../../src/AuthContext.jsx'
 import { useCart } from '../../src/CartContext.jsx'
 import ProfileMenu from '../components/ProfileMenu.jsx'
+import { API_BASE } from '../../src/api.js'
 
 export default function Giftshop(){
   const navigate = useNavigate()
@@ -17,7 +18,7 @@ export default function Giftshop(){
   const [toast, setToast] = useState(null)
   const toastTimer = useRef(null)
 
-  const apiBase = import.meta.env.VITE_API_BASE_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:5000' : '')
+  const apiBase = API_BASE()
 
   useEffect(()=>{
     const url = `${apiBase}/api/products`

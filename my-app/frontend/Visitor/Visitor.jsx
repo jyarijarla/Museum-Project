@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import './Visitor.css'
 import ProfileMenu from '../components/ProfileMenu.jsx'
 import { useAuth } from '../../src/AuthContext.jsx'
+import { API_BASE } from '../../src/api.js'
 
 export default function Visitor(){
   const navigate = useNavigate()
@@ -23,7 +24,7 @@ export default function Visitor(){
       return
     }
 
-    const apiBase = import.meta.env.VITE_API_BASE_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:5000' : '')
+    const apiBase = API_BASE()
     const uid = user.userId || user.UserID || user.id || user.userID
     if(!uid) {
       setError('No user id available')
@@ -104,11 +105,7 @@ export default function Visitor(){
   const handleCancelTicket = async (ticketPurchaseId) => {
   if (!confirm('Are you sure you want to cancel this ticket purchase?')) return
   try {
-    const apiBase = import.meta.env.VITE_API_BASE_URL || 
-      (typeof window !== 'undefined' && 
-      (window.location.hostname === 'localhost' || 
-       window.location.hostname === '127.0.0.1') 
-        ? 'http://localhost:5000' : '')
+    const apiBase = API_BASE()
     const resp = await fetch(`${apiBase}/api/visitor/ticket-purchases/cancel`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -227,7 +224,7 @@ export default function Visitor(){
                         onClick={async ()=>{
                           if(!confirm('Cancel membership? This will mark your membership as canceled.')) return
                           try{
-                            const apiBase = import.meta.env.VITE_API_BASE_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:5000' : '')
+                            const apiBase = API_BASE()
                             const mid = membership.MembershipID || membership.MembershipId
                             const resp = await fetch(`${apiBase}/api/membership/cancel`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ membershipId: mid }) })
                             if(!resp.ok){ alert('Cancel failed: ' + await resp.text()); return }

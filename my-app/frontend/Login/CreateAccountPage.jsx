@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './Login.css'
+import { API_BASE } from '../../src/api.js'
 
 export default function CreateAccountPage(){
   const navigate = useNavigate()
@@ -28,7 +29,7 @@ export default function CreateAccountPage(){
     }
 
     try {
-      const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+      const apiBase = API_BASE()
       const res = await fetch(`${apiBase}/api/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

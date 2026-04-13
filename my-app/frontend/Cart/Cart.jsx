@@ -4,6 +4,7 @@ import './Cart.css'
 import { useCart } from '../../src/CartContext.jsx'
 import { useAuth } from '../../src/AuthContext.jsx'
 import ProfileMenu from '../components/ProfileMenu.jsx'
+import { API_BASE } from '../../src/api.js'
 
 export default function Cart(){
   const { cart, updateQty, removeItem, clearCart, total } = useCart()
@@ -11,11 +12,7 @@ export default function Cart(){
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
-  const apiBase = import.meta.env.VITE_API_BASE_URL || (
-    (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
-      ? 'http://localhost:5000'
-      : ''
-  )
+  const apiBase = API_BASE()
 
   return (
     <div className="home-root">

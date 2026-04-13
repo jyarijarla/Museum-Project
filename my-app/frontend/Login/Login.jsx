@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import "./Login.css";
 import CreateAccountModal from './CreateAccountModal';
 import { useAuth } from '../../src/AuthContext.jsx'
+import { API_BASE } from '../../src/api.js'
 
 export default function Login() {
   const [showCreate, setShowCreate] = useState(false);
@@ -20,7 +21,7 @@ export default function Login() {
     };
 
     try {
-        const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'
+        const apiBase = API_BASE()
         console.log('[login] using apiBase=', apiBase)
         console.log("ENV:", import.meta.env)
         const res = await fetch(`${apiBase}/api/login`, {

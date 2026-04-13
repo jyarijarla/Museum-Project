@@ -326,13 +326,17 @@ router.post('/transaction/create', async (req, res) => {
   if (!items || !Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'No items provided' })
 
   try {
-    // resolve visitorId if needed
-    let vId = visitorId || null
-    if (!vId && userId) {
+    // resolve visitorId - client may pass a UserID or VisitorID interchangeably
+    let vId = null
+    const tryId = visitorId || userId || null
+    if (tryId) {
       try {
-        const [vrows] = await db.execute('SELECT VisitorID FROM Visitor WHERE UserID = ? OR VisitorID = ? LIMIT 1', [userId, userId])
+        const [vrows] = await db.execute(
+          'SELECT VisitorID FROM Visitor WHERE UserID = ? OR VisitorID = ? LIMIT 1',
+          [tryId, tryId]
+        )
         if (vrows && vrows.length > 0) vId = vrows[0].VisitorID
-      } catch (e) { }
+      } catch (_) { }
     }
     if (!vId) return res.status(404).json({ error: 'Visitor not found' })
 

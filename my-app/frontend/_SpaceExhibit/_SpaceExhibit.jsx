@@ -18,6 +18,33 @@ export default function SpaceExhibit(){
   const [loadingArtifacts, setLoadingArtifacts] = useState(true)
   const [artifactsError, setArtifactsError] = useState(null)
 
+  const isAdmin = user?.role === 'Admin' || user?.Role === 'Admin'
+  const [modal, setModal] = useState(false)
+  const [form, setForm] = useState({ name: '', description: '', entryDate: new Date().toISOString().slice(0,10) })
+  const [submitting, setSubmitting] = useState(false)
+  const [formError, setFormError] = useState('')
+  const [formSuccess, setFormSuccess] = useState('')
+
+  const openModal = () => { setForm({ name: '', description: '', entryDate: new Date().toISOString().slice(0,10) }); setFormError(''); setFormSuccess(''); setModal(true) }
+  const closeModal = () => setModal(false)
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!form.name.trim()) { setFormError('Name is required.'); return }
+    setSubmitting(true); setFormError('')
+    try {
+      const res = await fetch(`${API_BASE()}/api/artifacts`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: form.name.trim(), description: form.description.trim() || null, entryDate: form.entryDate || null, exhibitId: 1, userId: user?.userId || user?.UserID || user?.id })
+      })
+      const data = await res.json()
+      if (!res.ok) { setFormError(data.error || 'Failed to add artifact.'); setSubmitting(false); return }
+      setFormSuccess(`“${data.artifact.Name}” added!`)
+      setArtifacts(prev => [data.artifact, ...prev])
+      setForm({ name: '', description: '', entryDate: new Date().toISOString().slice(0,10) })
+      setTimeout(() => { closeModal(); setFormSuccess('') }, 1600)
+    } catch { setFormError('Network error.') } finally { setSubmitting(false) }
+  }
+
   useEffect(() => {
     fetch(`${API_BASE()}/api/exhibits/1/artifacts`)
       .then(r => r.json())
@@ -110,7 +137,10 @@ export default function SpaceExhibit(){
         <section className="exhibit-section" id="artifacts">
           <div className="ex-section-header">
             <h2 className="ex-section-title">Collection Artifacts</h2>
-            <span className="ex-artifact-count">{loadingArtifacts ? '…' : `${artifacts.length} items`}</span>
+            <div style={{display:'flex',alignItems:'center',gap:12}}>
+              <span className="ex-artifact-count">{loadingArtifacts ? '…' : `${artifacts.length} items`}</span>
+              {isAdmin && <button className="btn primary" style={{fontSize:13,padding:'7px 16px'}} onClick={openModal}>＋ Add Artifact</button>}
+            </div>
           </div>
           {loadingArtifacts && (
             <div className="artifact-shimmer-grid">
@@ -128,6 +158,11 @@ export default function SpaceExhibit(){
             <div className="artifact-grid">
               {artifacts.map((a, idx) => (
                 <div key={a.ArtifactID} className="artifact-card space-artifact">
+                  {a.ImageURL && (
+                    <div className="artifact-card-image">
+                      <img src={a.ImageURL} alt={a.Name} onError={e => { e.target.parentElement.style.display='none' }} />
+                    </div>
+                  )}
                   <div className="artifact-card-top">
                     <div className="artifact-accent-bar" />
                     <span className="artifact-index">#{String(idx + 1).padStart(2,'0')}</span>
@@ -152,6 +187,34 @@ export default function SpaceExhibit(){
       </main>
 
       <footer className="home-footer">© {new Date().getFullYear()} City Museum — Space Exhibit</footer>
+
+      {modal && (
+        <div className="artifact-modal-overlay" onClick={closeModal}>
+          <div className="artifact-modal" onClick={e => e.stopPropagation()}>
+            <div className="artifact-modal-header">
+              <h2>Add Artifact — Space</h2>
+              <button className="artifact-modal-close" onClick={closeModal}>✕</button>
+            </div>
+            <form className="artifact-form" onSubmit={handleSubmit}>
+              <label className="artifact-label">Name <span className="artifact-required">*</span>
+                <input className="artifact-input" type="text" value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} maxLength={120} placeholder="e.g. Apollo 11 Mission Patch" />
+              </label>
+              <label className="artifact-label">Description
+                <textarea className="artifact-input artifact-textarea" value={form.description} onChange={e => setForm(f => ({...f, description: e.target.value}))} maxLength={400} rows={3} placeholder="Brief description…" />
+              </label>
+              <label className="artifact-label">Entry Date
+                <input className="artifact-input" type="date" value={form.entryDate} onChange={e => setForm(f => ({...f, entryDate: e.target.value}))} />
+              </label>
+              {formError && <p className="artifact-form-error">{formError}</p>}
+              {formSuccess && <p className="artifact-form-success">{formSuccess}</p>}
+              <div className="artifact-form-actions">
+                <button type="button" className="btn ghost" onClick={closeModal}>Cancel</button>
+                <button type="submit" className="btn primary" disabled={submitting}>{submitting ? 'Adding…' : 'Add Artifact'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

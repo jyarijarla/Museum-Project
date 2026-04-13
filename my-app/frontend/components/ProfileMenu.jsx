@@ -62,6 +62,14 @@ export default function ProfileMenu(){
             {((user?.role || user?.Role || '').toString().toLowerCase() === 'admin') && (
               <button className="btn" onClick={()=>{ setOpen(false); navigate('/admin') }}>Admin Portal</button>
             )}
+            {/* show Curator Portal for curators */}
+            {((user?.role || user?.Role || '') === 'Curator') && (
+              <button className="btn" onClick={()=>{ setOpen(false); navigate('/curator-portal') }}>Curator Portal</button>
+            )}
+            {/* show Gift Shop Portal for gift shop managers */}
+            {((user?.role || user?.Role || '') === 'Gift_Shop_Manager') && (
+              <button className="btn" onClick={()=>{ setOpen(false); navigate('/giftshop-portal') }}>Gift Shop Portal</button>
+            )}
             <button className="btn primary" onClick={()=>{ setOpen(false); navigate('/dashboard') }}>My Dashboard</button>
             <button className="logout-option" onClick={doLogout}>Log out</button>
           </div>

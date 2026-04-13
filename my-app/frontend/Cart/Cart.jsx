@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import './Cart.css'
 import { useCart } from '../../src/CartContext.jsx'
 import { useAuth } from '../../src/AuthContext.jsx'
@@ -8,7 +8,9 @@ import ProfileMenu from '../components/ProfileMenu.jsx'
 export default function Cart(){
   const { cart, updateQty, removeItem, clearCart, total } = useCart()
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState(false)
   const apiBase = import.meta.env.VITE_API_BASE_URL || (
     (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
       ? 'http://localhost:5000'
@@ -35,6 +37,18 @@ export default function Cart(){
 
       <main className="cart-main">
         <div className="container">
+          {success && (
+            <div className="cart-success-screen">
+              <div className="cart-success-icon">✓</div>
+              <h2 className="cart-success-title">Purchase Successful!</h2>
+              <p className="cart-success-sub">Thank you for your order. Your items have been confirmed and are ready for your visit.</p>
+              <div className="cart-success-actions">
+                <Link className="btn primary" to="/">Back to Home</Link>
+                <Link className="btn ghost" to="/tickets">Buy Tickets</Link>
+              </div>
+            </div>
+          )}
+          {!success && (<>
           <div className="hero-card">
             <div>
               <div className="title-hero">Your Selections</div>
@@ -119,39 +133,35 @@ export default function Cart(){
 
                           const memberships = cart.filter(i=> i.type === 'membership')
                           let visitorId = null
+                          let membershipFailed = false
 
                           if(!data){
                             console.warn('Visitor lookup failed for user', user)
                             // Fallback: call membership purchase endpoint with userId and let the backend resolve/create Visitor
-                            let anySuccess = false
                             for(const m of memberships){
                               const p = await fetch(`${apiBase}/api/membership/purchase`, {
                                 method: 'POST',
                                 headers: { 'Content-Type':'application/json' },
                                 body: JSON.stringify({ userId: uid, membershipPlanId: m.id })
                               })
+                              const pj = await p.json().catch(()=>null)
                               if(!p.ok){
-                                let err = null
-                                try { err = await p.json() } catch(_) { err = await p.text().catch(()=>null) }
-                                console.error('purchase failed', { status: p.status, statusText: p.statusText, body: err })
-                                if (p.status === 404) {
-                                  alert('Membership API not found on server (404). Is the backend deployed at ' + apiBase + ' ?')
-                                } else {
-                                  alert('Failed to create membership: ' + (err && err.error ? err.error : p.statusText))
-                                }
+                                console.error('purchase failed', { status: p.status, body: pj })
+                                alert('Failed to create membership: ' + (pj?.error || p.statusText))
+                                membershipFailed = true
                               } else {
-                                anySuccess = true
                                 removeItem(m.id, m.type)
                               }
                             }
-                            if (!anySuccess) {
+                            if(membershipFailed){ setLoading(false); return }
+                            if(memberships.length === 0){
                               alert('Visitor profile not found. Please complete your profile before purchasing membership.')
                               setLoading(false)
                               return
                             }
                           } else {
                             const visitor = data.visitor || data
-                            visitorId = visitor.VisitorID || visitor.VisitorId || visitor.visitorId || visitor.VisitorID
+                            visitorId = visitor.VisitorID || visitor.VisitorId || visitor.visitorId
 
                             // for any membership items in cart, call purchase endpoint
                             for(const m of memberships){
@@ -160,15 +170,16 @@ export default function Cart(){
                                 headers: { 'Content-Type':'application/json' },
                                 body: JSON.stringify({ visitorId, membershipPlanId: m.id })
                               })
+                              const pj = await p.json().catch(()=>null)
                               if(!p.ok){
-                                const err = await p.json().catch(()=>null)
-                                console.error('purchase failed', err)
-                                alert('Failed to create membership: ' + (err && err.error ? err.error : p.statusText))
+                                console.error('purchase failed', pj)
+                                alert('Failed to create membership: ' + (pj?.error || p.statusText))
+                                membershipFailed = true
                               } else {
-                                // remove membership from cart after purchase
                                 removeItem(m.id, m.type)
                               }
                             }
+                            if(membershipFailed){ setLoading(false); return }
                           }
 
                           // Process non-membership product items via the transactions API
@@ -186,12 +197,11 @@ export default function Cart(){
                                 alert('Failed to submit product order')
                               } else {
                                 for(const p of products) removeItem(p.id, p.type)
-                                alert('Checkout complete — order recorded')
                               }
                             } catch(e){ console.error('Transaction error', e); alert('Checkout failed') }
-                          } else {
-                            alert('Checkout complete (membership processed).')
                           }
+                          clearCart()
+                          setSuccess(true)
                         }catch(e){
                           console.error(e)
                           alert('Checkout failed')
@@ -203,6 +213,7 @@ export default function Cart(){
               </div>
             </div>
           )}
+          </>)}
         </div>
       </main>
 

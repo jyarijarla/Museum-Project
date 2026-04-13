@@ -5,30 +5,6 @@ import { useAuth } from '../../src/AuthContext.jsx'
 import { useCart } from '../../src/CartContext.jsx'
 import ProfileMenu from '../components/ProfileMenu.jsx'
 
-// Product image map keyed by ProductID.
-// Falls back to a category-based lookup, then a generic museum image.
-const PRODUCT_IMAGES = {
-  5:  'https://images.unsplash.com/photo-1558060370-d644479cb6f7?w=400&auto=format&fit=crop&q=80', // toy / plush
-  6:  'https://www.chickychickyblingbling.com/cdn/shop/products/PlushTurtleToy_24c5a16f-1695-4ba4-ad9f-e66bba3f379c-256247.jpg?v=1677144907&width=750', // sea turtle
-  8:  'https://i.etsystatic.com/19283971/r/il/02a192/3996891131/il_1140xN.3996891131_dq6i.jpg', // windmill
-  9:  'https://spacecurios.com/cdn/shop/products/product-image-894795600_1024x1024@2x.jpg?v=1626725211', // solar system model
-  10: 'https://res.cloudinary.com/forallpromos/image/fetch/f_auto/v1631031462/https://www.4allpromos.com/sites/default/files/imagecache/720x720/candypress/ProdImages/large/159-LSC-AS08.jpg', // model atom
-  11: 'https://woodencaterpillar.com/2223-tm_large_default/handcrafted-wooden-mummy-toy-timeless-halloween-ancient-egypt-decor.jpg', // toy mummy
-  12: 'https://i5.walmartimages.com/seo/HABA-Little-Friends-Baby-Elephant-3-Chunky-Plastic-Zoo-Animal-Toy-Figure_3e101908-e9c2-4fc7-9167-87a26663cded.cd864cd4ccc4e0a695c3cd11a52f33d9.jpeg?odnHeight=2000&odnWidth=2000&odnBg=FFFFFF', // elephant
-  13: 'https://i.ebayimg.com/images/g/YOAAAOSw2GdjDSrQ/s-l1600.webp', // lion
-  14: 'https://westontable.com/cdn/shop/products/Heirloom-Wooden-Rocket-Ship-with-Astronaut-Blue-Weston-Table-SP.jpg?v=1762444861&width=2048', // rocketship
-  15: 'https://www.crystalgalleryelpaso.com/cdn/shop/files/IMG_0708.png?v=1685481102&width=823', // crystal growing kit
-  16: 'https://i.ebayimg.com/images/g/ERkAAeSwB5Jodaem/s-l1600.webp', // galileo thermometer
-  17: 'https://faoschwarz.com/cdn/shop/files/Lightning-Plasma-Ball-STEM-24751695495255.jpg?v=1773098042&width=700', // plasma ball
-  18: 'https://cdn.store-assets.com/s/888660/i/97943888.jpeg?width=1024&format=webp', // rosetta stone
-  19: 'https://shop.getty.edu/cdn/shop/files/CGA_01_obv_5000x.jpg?v=1686269469', // roman coin set
-  20: 'https://bellfordtoysandhobbies.com/cdn/shop/products/B028L06.jpg?v=1674402065&width=500', // viking longship
-  21: 'https://shop.amnh.org/cdn/shop/files/a_night_tote.jpg?v=1772217743&width=1080', // museum tote bag
-  22: 'https://www.raygunsite.com/cdn/shop/products/ProudMuseumPersonFoldedRAYGUN_1000x.jpg?v=1762457654', // t-shirt
-  23: 'https://cdn11.bigcommerce.com/s-dl22izwaan/images/stencil/1280w/products/1037/8465/apiswaavb__54096.1625592447.jpg?c=1', // dinosaur skeleton pin
-  24: 'https://i.guim.co.uk/img/media/326b5496b83e92075c340306de049afa7a29650f/0_764_2578_2409/master/2578.jpg?width=620&dpr=1&s=none&crop=none', // newton's cradle
-  25: 'https://i.etsystatic.com/10090233/r/il/e15405/6776436275/il_794xN.6776436275_pjzp.jpg', // egyptian papyrus art
-}
 
 // Generic fallback image if a ProductID isn't in the map above
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=400&auto=format&fit=crop&q=80'
@@ -125,7 +101,7 @@ export default function Giftshop(){
         ) : (
           <div className="gift-grid">
             {products.map((it) => {
-              const imgSrc = PRODUCT_IMAGES[it.ProductID] || FALLBACK_IMAGE
+              const imgSrc = it.ImageURL || it.imageURL || FALLBACK_IMAGE
               return (
                 <article key={it.ProductID} className="gift-card">
                   <div className="gift-image">

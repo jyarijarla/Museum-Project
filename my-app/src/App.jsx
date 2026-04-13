@@ -10,7 +10,9 @@ import NaturalExhibit from '../frontend/_NaturalExhibit/_NaturalExhibit.jsx'
 import AncientExhibit from '../frontend/_AncientExhibit/AncientExhibit.jsx'
 import Giftshop from '../frontend/Giftshop/Giftshop.jsx'
 import CartPage from '../frontend/Cart/Cart.jsx'
-import Admin from '../frontend/Admin/Admin.jsx'
+import Admin from '../frontend/Portals/Admin/Admin.jsx'
+import GiftShopPortal from '../frontend/Portals/GiftShopManager/GiftShopPortal.jsx'
+import CuratorPortal from '../frontend/Portals/Curator/CuratorPortal.jsx'
 import Tickets from '../frontend/Tickets/Tickets.jsx'
 
 function App() {
@@ -26,6 +28,8 @@ function App() {
       <Route path="/tickets" element={<Tickets/>} />
       <Route path="/cart" element={<CartPage/>} />
       <Route path="/admin" element={<Admin/>} />
+      <Route path="/giftshop-portal" element={<GiftShopPortal/>} />
+      <Route path="/curator-portal" element={<CuratorPortal/>} />
       <Route path="/exhibits/space" element={<SpaceExhibit/>} />
       <Route path="/exhibits/natural" element={<NaturalExhibit/>} />
       <Route path="/exhibits/ancient" element={<AncientExhibit/>} />

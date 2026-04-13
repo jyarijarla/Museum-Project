@@ -125,3 +125,20 @@ nav{display:flex;gap:14px;align-items:center}
   from{opacity:0;transform:scale(1.03)}
   to{opacity:1;transform:scale(1)}
 }
+
+/* ── Add Artifact Modal (shared across exhibit pages) ── */
+.artifact-modal-overlay{position:fixed;inset:0;background:rgba(2,6,23,0.55);backdrop-filter:blur(4px);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px}
+.artifact-modal{background:#fff;border-radius:20px;width:100%;max-width:480px;box-shadow:0 32px 80px rgba(2,6,23,0.18);overflow:hidden}
+.artifact-modal-header{display:flex;align-items:center;justify-content:space-between;padding:22px 24px 0}
+.artifact-modal-header h2{margin:0;font-size:20px;font-weight:800;color:var(--muted)}
+.artifact-modal-close{background:none;border:none;font-size:18px;color:rgba(2,6,23,0.35);cursor:pointer;padding:4px 8px;border-radius:8px;line-height:1;transition:background .12s}
+.artifact-modal-close:hover{background:rgba(2,6,23,0.06)}
+.artifact-form{padding:18px 24px 24px;display:flex;flex-direction:column;gap:14px}
+.artifact-label{display:flex;flex-direction:column;font-size:13px;font-weight:700;color:rgba(2,6,23,0.6);gap:5px}
+.artifact-required{color:#ef4444}
+.artifact-input{padding:10px 12px;border-radius:10px;border:1px solid rgba(2,6,23,0.1);font-size:14px;color:var(--muted);font-family:inherit;outline:none;transition:border-color .15s}
+.artifact-input:focus{border-color:var(--accent-2);box-shadow:0 0 0 3px rgba(37,99,235,0.07)}
+.artifact-textarea{resize:vertical;min-height:72px}
+.artifact-form-error{margin:0;font-size:13px;color:#ef4444;font-weight:600}
+.artifact-form-success{margin:0;font-size:13px;color:#10b981;font-weight:700}
+.artifact-form-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:4px}

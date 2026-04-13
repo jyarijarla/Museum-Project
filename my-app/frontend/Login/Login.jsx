@@ -52,9 +52,8 @@ export default function Login() {
       // persist via AuthContext
       try { login(result) } catch(e){ console.warn('login set failed', e) }
 
-      // Log result for debugging and default to Home for all users
       console.log('[login] result:', result);
-      navigate('/');
+      navigate('/')
 
     } catch (err) {
       console.error(err);

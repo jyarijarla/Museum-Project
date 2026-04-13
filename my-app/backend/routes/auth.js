@@ -155,6 +155,17 @@ router.get('/visitor/:id', async (req, res) => {
   }
 })
 
+// Return all membership types (for the membership page)
+router.get('/membership/types', async (req, res) => {
+  try {
+    const [rows] = await db.execute('SELECT TypeID, TypeName, DiscountPercent, BenefitsDescription FROM MembershipType ORDER BY TypeID')
+    res.json({ types: rows })
+  } catch (err) {
+    console.error('Failed to load membership types:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
 // Purchase membership: creates a Membership row for a Visitor with 1-year expiry
 router.post('/membership/purchase', async (req, res) => {
   // Accept either a VisitorID or a UserID (some deployments store Visitor linked to UserAccount differently)
@@ -216,88 +227,38 @@ router.post('/membership/purchase', async (req, res) => {
       }
     }
 
-    // Try inserting membership. Support optional membershipPlanId which may map
-    // to either `MembershipTypeID` or `PlanID` depending on the schema. If the
-    // provided id doesn't exist in the membership types table, return a helpful
-    // 400 with available types so the frontend can map correctly.
-    const tryInsertWithColumn = async (colName) => {
-      const sql = `INSERT INTO Membership (VisitorID, ${colName}, IsExpired, StartDate, ExpirationDate)
-                   VALUES (?, ?, 0, CURDATE(), DATE_ADD(CURDATE(), INTERVAL 1 YEAR))`
-      return db.execute(sql, [resolvedVisitorId, membershipPlanId])
+    // Validate membership type id if provided
+    if (membershipPlanId) {
+      const [typeCheck] = await db.execute('SELECT TypeID FROM MembershipType WHERE TypeID = ?', [membershipPlanId])
+      if (!typeCheck || typeCheck.length === 0) {
+        const [types] = await db.execute('SELECT TypeID, TypeName FROM MembershipType')
+        return res.status(400).json({ error: 'Invalid membership type id', availableTypes: types })
+      }
     }
 
-    let result = null
-    try {
-      if (membershipPlanId) {
-        // try MembershipTypeID first
-        try {
-          const [r] = await tryInsertWithColumn('MembershipTypeID')
-          result = r
-        } catch (e1) {
-          // Log error details for debugging
-          console.error('tryInsertWithColumn MembershipTypeID failed:', { code: e1 && e1.code, errno: e1 && e1.errno, message: e1 && e1.message })
-          // FK error: provided id doesn't exist in MembershipType
-          if (e1 && (e1.code === 'ER_NO_REFERENCED_ROW_2' || e1.errno === 1452)) {
-            try {
-              const [types] = await db.execute('SELECT TypeID, TypeName FROM MembershipType')
-              return res.status(400).json({ error: 'Invalid membership type id', availableTypes: types })
-            } catch (tErr) {
-              return res.status(400).json({ error: 'Invalid membership type id' })
-            }
-          }
+    // Upsert: insert new row or update existing one to renew (new dates, Active status, new type)
+    const typeIdVal = membershipPlanId || null
+    const [result] = await db.execute(
+      `INSERT INTO Membership (VisitorID, MembershipTypeID, IsExpired, StartDate, ExpirationDate, Status, CancelledDate)
+       VALUES (?, ?, 0, CURDATE(), DATE_ADD(CURDATE(), INTERVAL 1 YEAR), 'Active', NULL)
+       ON DUPLICATE KEY UPDATE
+         MembershipTypeID = VALUES(MembershipTypeID),
+         IsExpired        = 0,
+         StartDate        = CURDATE(),
+         ExpirationDate   = DATE_ADD(CURDATE(), INTERVAL 1 YEAR),
+         Status           = 'Active',
+         CancelledDate    = NULL`,
+      [resolvedVisitorId, typeIdVal]
+    )
 
-          // If column doesn't exist, try PlanID next
-          if (e1 && (e1.code === 'ER_BAD_FIELD_ERROR' || e1.code === 'ER_UNKNOWN_COLUMN')) {
-            try {
-              const [r2] = await tryInsertWithColumn('PlanID')
-              result = r2
-            } catch (e2) {
-              console.error('tryInsertWithColumn PlanID failed:', { code: e2 && e2.code, errno: e2 && e2.errno, message: e2 && e2.message })
-              if (e2 && (e2.code === 'ER_BAD_FIELD_ERROR' || e2.code === 'ER_UNKNOWN_COLUMN')) {
-                // No type column present, fall back to a plain insert
-                const [r3] = await db.execute(
-                  `INSERT INTO Membership (VisitorID, IsExpired, StartDate, ExpirationDate)
-                   VALUES (?, 0, CURDATE(), DATE_ADD(CURDATE(), INTERVAL 1 YEAR))`,
-                  [resolvedVisitorId]
-                )
-                result = r3
-              } else if (e2 && (e2.code === 'ER_NO_REFERENCED_ROW_2' || e2.errno === 1452)) {
-                try {
-                  const [types] = await db.execute('SELECT TypeID, TypeName FROM MembershipType')
-                  return res.status(400).json({ error: 'Invalid membership type id for PlanID column', availableTypes: types })
-                } catch (tErr) {
-                  return res.status(400).json({ error: 'Invalid membership type id for PlanID column' })
-                }
-              } else {
-                throw e2
-              }
-            }
-          } else {
-            throw e1
-          }
-        }
-      } else {
-        // No membershipPlanId provided — basic membership row
-        const [r] = await db.execute(
-          `INSERT INTO Membership (VisitorID, IsExpired, StartDate, ExpirationDate)
-           VALUES (?, 0, CURDATE(), DATE_ADD(CURDATE(), INTERVAL 1 YEAR))`,
-          [resolvedVisitorId]
-        )
-        result = r
-      }
-
-      const membershipId = result && result.insertId ? result.insertId : null
-      return res.json({ success: true, membershipId, visitorId: resolvedVisitorId })
-    } catch (insertErr) {
-      // If the visitor already has a membership (unique constraint), fetch and return it
-      if (insertErr && insertErr.code === 'ER_DUP_ENTRY') {
-        const [existing] = await db.execute('SELECT * FROM Membership WHERE VisitorID = ? LIMIT 1', [resolvedVisitorId])
-        if (existing && existing.length > 0) {
-          return res.json({ success: true, message: 'Membership already exists', membership: existing[0] })
-        }
-      }
-      throw insertErr
-    }
+    const [fetched] = await db.execute(
+      `SELECT m.*, mt.TypeName FROM Membership m
+       LEFT JOIN MembershipType mt ON mt.TypeID = m.MembershipTypeID
+       WHERE m.VisitorID = ? LIMIT 1`,
+      [resolvedVisitorId]
+    )
+    const membership = fetched && fetched.length > 0 ? fetched[0] : null
+    return res.json({ success: true, membershipId: membership?.MembershipID ?? null, visitorId: resolvedVisitorId, membership })
   } catch (err) {
     console.error('Membership purchase failed:', err && err.stack ? err.stack : err)
     // If this failed due to a missing referenced membership type, return
@@ -420,8 +381,7 @@ router.post('/transaction/create', async (req, res) => {
 // Return all products from Product table (avoid selecting columns that may be absent)
 router.get('/products', async (req, res) => {
   try {
-    // Some schemas may not include DepartmentID on Product; select common columns only
-    const [rows] = await db.execute('SELECT ProductID, Name, Description, RetailPrice FROM Product')
+    const [rows] = await db.execute('SELECT ProductID, Name, Description, RetailPrice, ImageURL FROM Product')
     res.json({ products: rows })
   } catch (err) {
     console.error('Fetch products failed:', err)
@@ -714,13 +674,107 @@ router.post('/membership/cancel', async (req, res) => {
   }
 })
 
+// GET /api/admin/departments — admin: list departments for employee form
+router.get('/admin/departments', async (req, res) => {
+  const { userId } = req.query
+  try {
+    if (!userId) return res.status(401).json({ error: 'Authentication required' })
+    const [urows] = await db.execute('SELECT Role FROM UserAccount WHERE UserID = ?', [userId])
+    if (!urows || urows.length === 0 || urows[0].Role !== 'Admin') return res.status(403).json({ error: 'Admin access required' })
+    const [rows] = await db.execute('SELECT DepartmentID, Name FROM Department ORDER BY Name')
+    res.json({ departments: rows })
+  } catch (err) {
+    console.error('Fetch departments failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// POST /api/admin/create-account — admin: create a Visitor, Employee, or Gift_Shop_Manager account
+router.post('/admin/create-account', async (req, res) => {
+  const { userId, accountType, username, password,
+          firstName, lastName, email, phone, address, dateOfBirth,
+          hireDate } = req.body || {}
+
+  if (!userId) return res.status(401).json({ error: 'Authentication required' })
+  if (!accountType || !username || !password || !firstName || !lastName) {
+    return res.status(400).json({ error: 'accountType, username, password, firstName, and lastName are required' })
+  }
+
+  const validTypes = ['Visitor', 'Curator', 'Gift_Shop_Manager']
+  if (!validTypes.includes(accountType)) return res.status(400).json({ error: 'Invalid accountType' })
+
+  try {
+    // Verify caller is admin
+    const [urows] = await db.execute('SELECT Role FROM UserAccount WHERE UserID = ?', [userId])
+    if (!urows || urows.length === 0 || urows[0].Role !== 'Admin') {
+      return res.status(403).json({ error: 'Admin access required' })
+    }
+
+    const bcrypt = (await import('bcryptjs')).default
+    const hash = await bcrypt.hash(password, 10)
+
+    // Insert UserAccount
+    const [uaRes] = await db.execute(
+      "INSERT INTO UserAccount (Username, PasswordHash, Role) VALUES (?, ?, ?)",
+      [username, hash, accountType]
+    )
+    const newUserId = uaRes.insertId
+
+    let profileId = null
+
+    if (accountType === 'Visitor') {
+      const dob = dateOfBirth || null
+      const [vRes] = await db.execute(
+        `INSERT INTO Visitor (UserID, FirstName, LastName, PhoneNumber, Email, DateOfBirth, Address)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [newUserId, firstName, lastName, phone || '', email || null, dob, address || null]
+      ).catch(async () => {
+        // Fallback if UserID column doesn't exist
+        return db.execute(
+          `INSERT INTO Visitor (FirstName, LastName, PhoneNumber, Email, DateOfBirth, Address)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [firstName, lastName, phone || '', email || null, dob, address || null]
+        )
+      })
+      profileId = vRes && vRes.insertId
+    } else {
+      // Curator or Gift_Shop_Manager → Staff row
+      const hireDateVal = hireDate || new Date().toISOString().slice(0, 10)
+      const dobVal = dateOfBirth || null
+      const [sRes] = await db.execute(
+        `INSERT INTO Staff (UserID, FirstName, LastName, DateOfBirth, Email, PhoneNumber, Address, HireDate)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [newUserId, firstName, lastName, dobVal, email || null, phone || null, address || null, hireDateVal]
+      )
+      profileId = sRes && sRes.insertId
+    }
+
+    res.json({ success: true, userId: newUserId, profileId, accountType })
+  } catch (err) {
+    if (err && err.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: 'Username already exists' })
+    console.error('Admin create-account failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// GET /api/exhibits — list all exhibits
+router.get('/exhibits', async (req, res) => {
+  try {
+    const [rows] = await db.execute('SELECT ExhibitID, ExhibitName, Description FROM Exhibit ORDER BY ExhibitID')
+    res.json({ exhibits: rows })
+  } catch (err) {
+    console.error('Fetch exhibits failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
 // GET /api/exhibits/:id/artifacts
 router.get('/exhibits/:id/artifacts', async (req, res) => {
   const exhibitId = Number(req.params.id)
   if (!exhibitId) return res.status(400).json({ error: 'Invalid exhibit id' })
   try {
     const [rows] = await db.execute(
-      `SELECT ArtifactID, ExhibitID, Name, Description, EntryDate
+      `SELECT ArtifactID, ExhibitID, Name, Description, EntryDate, ImageURL
        FROM Artifact
        WHERE ExhibitID = ?
        ORDER BY EntryDate DESC, ArtifactID ASC`,
@@ -729,6 +783,674 @@ router.get('/exhibits/:id/artifacts', async (req, res) => {
     res.json({ artifacts: rows })
   } catch (err) {
     console.error('Fetch artifacts failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// POST /api/artifacts — Admin only: add a new artifact to an exhibit
+router.post('/artifacts', async (req, res) => {
+  const { name, description, entryDate, exhibitId, userId } = req.body || {}
+  if (!name || !exhibitId) return res.status(400).json({ error: 'name and exhibitId are required' })
+  try {
+    if (!userId) return res.status(401).json({ error: 'Authentication required' })
+    const [urows] = await db.execute('SELECT Role FROM UserAccount WHERE UserID = ?', [userId])
+    if (!urows || urows.length === 0 || urows[0].Role !== 'Admin') {
+      return res.status(403).json({ error: 'Admin access required' })
+    }
+    const dateVal = entryDate || new Date().toISOString().slice(0, 10)
+    const [result] = await db.execute(
+      'INSERT INTO Artifact (ExhibitID, Name, Description, EntryDate) VALUES (?, ?, ?, ?)',
+      [exhibitId, name, description || null, dateVal]
+    )
+    const artifactId = result.insertId
+    res.json({
+      success: true,
+      artifact: { ArtifactID: artifactId, ExhibitID: exhibitId, Name: name, Description: description || null, EntryDate: dateVal }
+    })
+  } catch (err) {
+    console.error('Add artifact failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// ─────────────────────────────────────────
+// CURATOR PORTAL ROUTES
+// ─────────────────────────────────────────
+
+// GET /api/curator/exhibit-report
+// Returns per-exhibit: artifact count, tickets sold, and revenue
+// Joins: Exhibit → Artifact, TicketPurchaseItem, TicketPurchase
+router.get('/curator/exhibit-report', async (req, res) => {
+  try {
+    const { dateFrom, dateTo, sortBy } = req.query
+
+    // Date conditions go on the TicketPurchase JOIN so exhibits with 0 tickets still appear
+    let tpJoinCond = 'tp.TicketPurchaseID = tpi.TicketPurchaseID'
+    const params = []
+    if (dateFrom) { tpJoinCond += ' AND tp.VisitDate >= ?'; params.push(dateFrom) }
+    if (dateTo)   { tpJoinCond += ' AND tp.VisitDate <= ?'; params.push(dateTo)   }
+
+    const sortMap = {
+      revenue_desc:   'Revenue DESC',
+      revenue_asc:    'Revenue ASC',
+      tickets_desc:   'TicketsSold DESC',
+      tickets_asc:    'TicketsSold ASC',
+      artifacts_desc: 'ArtifactCount DESC',
+      name_asc:       'e.ExhibitName ASC',
+    }
+    const orderBy = sortMap[sortBy] || sortMap.revenue_desc
+
+    const [rows] = await db.execute(`
+      SELECT
+        e.ExhibitID,
+        e.ExhibitName,
+        e.Status,
+        e.MaxCapacity,
+        COUNT(DISTINCT a.ArtifactID)                   AS ArtifactCount,
+        COALESCE(SUM(tpi.Quantity), 0)                 AS TicketsSold,
+        ROUND(COALESCE(SUM(tpi.Subtotal), 0), 2)       AS Revenue
+      FROM Exhibit e
+      LEFT JOIN Artifact            a   ON a.ExhibitID         = e.ExhibitID
+      LEFT JOIN TicketPurchaseItem  tpi ON tpi.ExhibitID        = e.ExhibitID
+      LEFT JOIN TicketPurchase      tp  ON ${tpJoinCond}
+      GROUP BY e.ExhibitID, e.ExhibitName, e.Status, e.MaxCapacity
+      ORDER BY ${orderBy}
+    `, params)
+
+    res.json({ rows })
+  } catch (err) {
+    console.error('curator exhibit report error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// ─────────────────────────────────────────
+// GIFT SHOP PORTAL ROUTES  (DepartmentID = 4)
+// ─────────────────────────────────────────
+const GIFTSHOP_DEPT_ID = 4
+
+// GET /api/giftshop/products
+router.get('/giftshop/products', async (req, res) => {
+  try {
+    const [rows] = await db.execute(
+      `SELECT ProductID, Name, Description, RetailPrice
+       FROM Product
+       ORDER BY Name ASC`
+    )
+    res.json({ products: rows })
+  } catch (err) {
+    console.error('giftshop products error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// GET /api/giftshop/transactions  — recent transactions with visitor + product info
+router.get('/giftshop/transactions', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 30, 100)
+    // One row per transaction, aggregating product names via GROUP_CONCAT
+    const [rows] = await db.execute(
+      `SELECT
+         tr.TransactionID,
+         tr.Date,
+         tr.Revenue,
+         CONCAT(v.FirstName, ' ', v.LastName) AS VisitorName,
+         GROUP_CONCAT(p.Name ORDER BY p.Name SEPARATOR ', ') AS Products,
+         SUM(tp.Quantity) AS TotalItems
+       FROM TransactionRecord tr
+       JOIN Visitor v ON v.VisitorID = tr.VisitorID
+       LEFT JOIN TransactionProduct tp ON tp.TransactionID = tr.TransactionID
+       LEFT JOIN Product p ON p.ProductID = tp.ProductID
+       WHERE tr.DepartmentID = ?
+       GROUP BY tr.TransactionID, tr.Date, tr.Revenue, v.FirstName, v.LastName
+       ORDER BY tr.Date DESC, tr.TransactionID DESC
+       LIMIT ?`,
+      [GIFTSHOP_DEPT_ID, limit]
+    )
+    res.json({ transactions: rows })
+  } catch (err) {
+    console.error('giftshop transactions error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// GET /api/giftshop/metrics  — aggregated numbers for the portal header cards
+router.get('/giftshop/metrics', async (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10)
+    const [[totalProductsRow], [totalTxnRow], [todayTxnRow], [topProductRow], [lowStockRow]] = await Promise.all([
+      db.execute(`SELECT COUNT(*) AS cnt FROM Product`),
+      db.execute(
+        `SELECT COUNT(*) AS cnt, COALESCE(SUM(Revenue), 0) AS totalRevenue
+         FROM TransactionRecord WHERE DepartmentID = ?`,
+        [GIFTSHOP_DEPT_ID]
+      ),
+      db.execute(
+        `SELECT COUNT(*) AS cnt, COALESCE(SUM(Revenue), 0) AS revenue
+         FROM TransactionRecord WHERE DepartmentID = ? AND Date = ?`,
+        [GIFTSHOP_DEPT_ID, today]
+      ),
+      db.execute(
+        `SELECT p.Name, SUM(tp.Quantity) AS totalSold
+         FROM TransactionProduct tp
+         JOIN Product p ON p.ProductID = tp.ProductID
+         JOIN TransactionRecord tr ON tr.TransactionID = tp.TransactionID
+         WHERE tr.DepartmentID = ?
+         GROUP BY p.ProductID, p.Name
+         ORDER BY totalSold DESC
+         LIMIT 1`,
+        [GIFTSHOP_DEPT_ID]
+      ),
+      db.execute(`SELECT COUNT(*) AS cnt FROM Product WHERE StockQuantity <= LowStockThreshold`),
+    ])
+    res.json({
+      totalProducts:     totalProductsRow[0]?.cnt    ?? 0,
+      totalTransactions: totalTxnRow[0]?.cnt         ?? 0,
+      totalRevenue:      parseFloat(totalTxnRow[0]?.totalRevenue ?? 0),
+      revenueToday:      parseFloat(todayTxnRow[0]?.revenue ?? 0),
+      transactionsToday: todayTxnRow[0]?.cnt         ?? 0,
+      topProduct:        topProductRow[0]             ?? null,
+      lowStockCount:     lowStockRow[0]?.cnt          ?? 0,
+    })
+  } catch (err) {
+    console.error('giftshop metrics error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// GET /api/giftshop/products/analytics — per-product sales stats + current inventory
+// Filters: productName, dateFrom, dateTo, stockStatus (out/low/ok), sortBy
+router.get('/giftshop/products/analytics', async (req, res) => {
+  try {
+    const { productName, dateFrom, dateTo, stockStatus, sortBy } = req.query
+
+    // Date conditions applied inside CASE expressions for sales columns
+    const dateConds  = []
+    const dateParams = []
+    if (dateFrom) { dateConds.push('tr.Date >= ?'); dateParams.push(dateFrom) }
+    if (dateTo)   { dateConds.push('tr.Date <= ?'); dateParams.push(dateTo)   }
+    const caseExpr = dateConds.length ? dateConds.join(' AND ') : '1=1'
+
+    // Product-level WHERE (stock status + name search)
+    const prodWhere  = []
+    const prodParams = []
+    if (productName) { prodWhere.push('p.Name LIKE ?'); prodParams.push(`%${productName}%`) }
+    if      (stockStatus === 'out') prodWhere.push('p.StockQuantity = 0')
+    else if (stockStatus === 'low') prodWhere.push('p.StockQuantity > 0 AND p.StockQuantity <= p.LowStockThreshold')
+    else if (stockStatus === 'ok')  prodWhere.push('p.StockQuantity > p.LowStockThreshold')
+    const whereClause = prodWhere.length ? `WHERE ${prodWhere.join(' AND ')}` : ''
+
+    const sortMap = {
+      name_asc:     'p.Name ASC',
+      name_desc:    'p.Name DESC',
+      revenue_desc: 'TotalRevenue DESC',
+      qty_desc:     'TotalQtySold DESC',
+      stock_asc:    'p.StockQuantity ASC',
+      last_sold:    'LastSoldDate DESC',
+    }
+    const orderBy = sortMap[sortBy] || 'p.Name ASC'
+
+    // dateParams repeated once per CASE expression (5 total), then prodParams, then GIFTSHOP_DEPT_ID for JOIN
+    const allParams = [...dateParams, ...dateParams, ...dateParams, ...dateParams, ...dateParams, ...prodParams, GIFTSHOP_DEPT_ID]
+
+    const [rows] = await db.execute(`
+      SELECT
+        p.ProductID,
+        p.Name,
+        p.RetailPrice,
+        p.StockQuantity,
+        p.LowStockThreshold,
+        COALESCE(SUM(CASE WHEN ${caseExpr} THEN tp.Quantity                  ELSE 0 END), 0) AS TotalQtySold,
+        COALESCE(SUM(CASE WHEN ${caseExpr} THEN p.RetailPrice * tp.Quantity  ELSE 0 END), 0) AS TotalRevenue,
+        COUNT(DISTINCT CASE WHEN ${caseExpr} THEN tr.TransactionID           END)             AS NumTransactions,
+        COALESCE(AVG(CASE WHEN ${caseExpr} THEN tp.Quantity                  END),    0)      AS AvgQtyPerTxn,
+        MAX(CASE           WHEN ${caseExpr} THEN tr.Date                     END)             AS LastSoldDate
+      FROM Product p
+      INNER JOIN TransactionProduct tp ON tp.ProductID     = p.ProductID
+      INNER JOIN TransactionRecord  tr ON tr.TransactionID = tp.TransactionID
+                                      AND tr.DepartmentID  = ?
+      ${whereClause}
+      GROUP BY p.ProductID, p.Name, p.RetailPrice, p.StockQuantity, p.LowStockThreshold
+      HAVING NumTransactions > 0
+      ORDER BY ${orderBy}
+    `, allParams)
+
+    res.json({ products: rows })
+  } catch (err) {
+    console.error('giftshop products analytics error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// POST /api/giftshop/products — add a new product to the catalogue
+router.post('/giftshop/products', async (req, res) => {
+  try {
+    const { name, description, retailPrice, stockQuantity, lowStockThreshold, imageURL } = req.body || {}
+    if (!name || name.toString().trim() === '') return res.status(400).json({ error: 'Name is required.' })
+    const price     = parseFloat(retailPrice)
+    const stock     = parseInt(stockQuantity ?? 0, 10)
+    const threshold = parseInt(lowStockThreshold ?? 5, 10)
+    if (!Number.isFinite(price) || price < 0) return res.status(400).json({ error: 'Invalid retail price.' })
+    const [result] = await db.execute(
+      `INSERT INTO Product (Name, Description, RetailPrice, StockQuantity, LowStockThreshold, imageURL)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [name.toString().trim(), description?.toString().trim() || null, price, stock, threshold, imageURL?.toString().trim() || null]
+    )
+    const [rows] = await db.execute('SELECT * FROM Product WHERE ProductID = ?', [result.insertId])
+    res.status(201).json({ success: true, product: rows[0] })
+  } catch (err) {
+    console.error('giftshop add product error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// PUT /api/giftshop/products/:id/stock — update a product's stock quantity
+router.put('/giftshop/products/:id/stock', async (req, res) => {
+  try {
+    const id     = parseInt(req.params.id, 10)
+    const newQty = parseInt(req.body.stockQuantity, 10)
+    if (!Number.isFinite(id) || id <= 0 || !Number.isFinite(newQty) || newQty < 0) {
+      return res.status(400).json({ error: 'Invalid product ID or quantity.' })
+    }
+    const [result] = await db.execute(
+      'UPDATE Product SET StockQuantity = ? WHERE ProductID = ?',
+      [newQty, id]
+    )
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Product not found.' })
+    res.json({ ok: true, stockQuantity: newQty })
+  } catch (err) {
+    console.error('giftshop stock update error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// GET /api/giftshop/report  — full transaction line-item report with visitor info
+// Filters: search (visitor name, username, or product name), dateFrom, dateTo, sortBy
+router.get('/giftshop/report', async (req, res) => {
+  try {
+    const { search, dateFrom, dateTo, sortBy } = req.query
+
+    const conds  = ['tr.DepartmentID = ?']
+    const params = [GIFTSHOP_DEPT_ID]
+
+    if (dateFrom) { conds.push('tr.Date >= ?'); params.push(dateFrom) }
+    if (dateTo)   { conds.push('tr.Date <= ?'); params.push(dateTo)   }
+    if (search) {
+      conds.push('(p.Name LIKE ? OR CONCAT(v.FirstName,\' \',v.LastName) LIKE ? OR u.Username LIKE ?)')
+      const like = `%${search}%`
+      params.push(like, like, like)
+    }
+
+    const sortMap = {
+      date_desc:    'tr.Date DESC, tr.TransactionID DESC',
+      date_asc:     'tr.Date ASC,  tr.TransactionID ASC',
+      revenue_desc: 'tr.Revenue DESC',
+      revenue_asc:  'tr.Revenue ASC',
+      product_asc:  'p.Name ASC',
+    }
+    const orderBy = sortMap[sortBy] || sortMap.date_desc
+
+    const [rows] = await db.execute(`
+      SELECT
+        tr.TransactionID,
+        DATE_FORMAT(tr.Date, '%Y-%m-%d')          AS Date,
+        CONCAT(v.FirstName,' ',v.LastName)         AS VisitorName,
+        u.Username,
+        p.Name                                     AS ProductName,
+        tp.Quantity,
+        p.RetailPrice,
+        ROUND(p.RetailPrice * tp.Quantity, 2)      AS LineTotal,
+        tr.Revenue                                 AS TxnTotal
+      FROM TransactionRecord  tr
+      JOIN TransactionProduct tp ON tp.TransactionID = tr.TransactionID
+      JOIN Product            p  ON p.ProductID      = tp.ProductID
+      JOIN Visitor            v  ON v.VisitorID      = tr.VisitorID
+      JOIN UserAccount        u  ON u.UserID         = v.UserID
+      WHERE ${conds.join(' AND ')}
+      ORDER BY ${orderBy}
+      LIMIT 500
+    `, params)
+
+    res.json({ rows })
+  } catch (err) {
+    console.error('giftshop report error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// ─────────────────────────────────────────
+// ADMIN DASHBOARD ROUTES
+// ─────────────────────────────────────────
+
+// GET /api/admin/metrics — all KPI cards for the overview
+router.get('/admin/metrics', async (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10)
+    const [
+      [ticketRow],
+      [memberRow],
+      [revenueRow],
+      [exhibitRow],
+      [visitorRow],
+      [txnRow],
+      memberTypeRows,
+      [todayTicketRow],
+    ] = await Promise.all([
+      db.execute(`SELECT COALESCE(SUM(TotalAmount),0) AS ticketRevenue, COUNT(*) AS ticketOrders
+                  FROM TicketPurchase WHERE Status = 'Active'`),
+      db.execute(`SELECT COUNT(*) AS activeMemberships FROM Membership WHERE Status = 'Active'`),
+      db.execute(`SELECT COALESCE(SUM(Revenue),0) AS totalRevenue, COUNT(*) AS totalTransactions
+                  FROM TransactionRecord`),
+      db.execute(`SELECT COUNT(*) AS activeExhibits FROM Exhibit WHERE Status = 'Active'`),
+      db.execute(`SELECT COUNT(*) AS totalVisitors FROM Visitor`),
+      db.execute(`SELECT COUNT(*) AS totalTickets, COUNT(DISTINCT VisitorID) AS uniqueTicketVisitors FROM Ticket`),
+      db.execute(`SELECT mt.TypeName, COUNT(*) AS cnt
+                  FROM Membership m
+                  JOIN MembershipType mt ON mt.TypeID = m.MembershipTypeID
+                  WHERE m.Status = 'Active'
+                  GROUP BY mt.TypeID, mt.TypeName`),
+      db.execute(`SELECT COALESCE(SUM(TotalAmount),0) AS revenueToday, COUNT(*) AS ordersToday
+                  FROM TicketPurchase WHERE DATE(PurchaseDate) = ?`, [today]),
+    ])
+    res.json({
+      ticketRevenue:        parseFloat(ticketRow[0]?.ticketRevenue ?? 0),
+      ticketOrders:         ticketRow[0]?.ticketOrders         ?? 0,
+      activeMemberships:    memberRow[0]?.activeMemberships    ?? 0,
+      totalRevenue:         parseFloat(revenueRow[0]?.totalRevenue ?? 0),
+      totalTransactions:    revenueRow[0]?.totalTransactions   ?? 0,
+      activeExhibits:       exhibitRow[0]?.activeExhibits      ?? 0,
+      totalVisitors:        visitorRow[0]?.totalVisitors        ?? 0,
+      totalTickets:         txnRow[0]?.totalTickets             ?? 0,
+      uniqueTicketVisitors: txnRow[0]?.uniqueTicketVisitors     ?? 0,
+      revenueToday:         parseFloat(todayTicketRow[0]?.revenueToday ?? 0),
+      ordersToday:          todayTicketRow[0]?.ordersToday      ?? 0,
+      membershipByType:     memberTypeRows[0] ?? [],
+    })
+  } catch (err) {
+    console.error('admin metrics error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// GET /api/admin/revenue-trend — daily revenue over a date range (all depts combined)
+// Query params: dateFrom, dateTo
+router.get('/admin/revenue-trend', async (req, res) => {
+  try {
+    const { dateFrom, dateTo } = req.query
+    const conds  = []
+    const params = []
+    if (dateFrom) { conds.push('tr.Date >= ?'); params.push(dateFrom) }
+    if (dateTo)   { conds.push('tr.Date <= ?'); params.push(dateTo)   }
+    const where = conds.length ? `WHERE ${conds.join(' AND ')}` : ''
+    const [rows] = await db.execute(`
+      SELECT DATE_FORMAT(tr.Date,'%Y-%m-%d')   AS date,
+             ROUND(SUM(tr.Revenue),2)           AS revenue,
+             COUNT(*)                           AS transactions,
+             d.Name                             AS department
+      FROM TransactionRecord tr
+      JOIN Department d ON d.DepartmentID = tr.DepartmentID
+      ${where}
+      GROUP BY DATE_FORMAT(tr.Date,'%Y-%m-%d'), tr.DepartmentID, d.Name
+      ORDER BY 1 ASC
+    `, params)
+    // Also produce a daily total (summed across all depts)
+    const totals = {}
+    for (const r of rows) {
+      if (!totals[r.date]) totals[r.date] = { date: r.date, revenue: 0, transactions: 0 }
+      totals[r.date].revenue      += parseFloat(r.revenue)
+      totals[r.date].transactions += r.transactions
+    }
+    res.json({ byDeptDay: rows, daily: Object.values(totals).sort((a, b) => a.date.localeCompare(b.date)) })
+  } catch (err) {
+    console.error('admin revenue-trend error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// GET /api/admin/tickets/report — ticket purchase report with filters
+// Query params: dateFrom, dateTo (visit date), purchaseDateFrom, purchaseDateTo, status, sortBy, groupBy
+router.get('/admin/tickets/report', async (req, res) => {
+  try {
+    const { dateFrom, dateTo, purchaseDateFrom, purchaseDateTo, status, sortBy, groupBy } = req.query
+
+    const conds  = []
+    const params = []
+    if (dateFrom)         { conds.push('tp.VisitDate >= ?');    params.push(dateFrom) }
+    if (dateTo)           { conds.push('tp.VisitDate <= ?');    params.push(dateTo)   }
+    if (purchaseDateFrom) { conds.push('tp.PurchaseDate >= ?'); params.push(purchaseDateFrom) }
+    if (purchaseDateTo)   { conds.push('tp.PurchaseDate <= ?'); params.push(purchaseDateTo)   }
+    if (status)           { conds.push('tp.Status = ?');        params.push(status)   }
+    const where = conds.length ? `WHERE ${conds.join(' AND ')}` : ''
+
+    if (groupBy === 'date') {
+      const [rows] = await db.execute(`
+        SELECT DATE_FORMAT(tp.VisitDate,'%Y-%m-%d') AS visitDate,
+               COUNT(*)                             AS orders,
+               COUNT(DISTINCT tp.VisitorID)         AS uniqueVisitors,
+               ROUND(SUM(tp.TotalAmount),2)         AS totalRevenue
+        FROM TicketPurchase tp
+        ${where}
+        GROUP BY DATE_FORMAT(tp.VisitDate,'%Y-%m-%d')
+        ORDER BY visitDate DESC
+        LIMIT 200
+      `, params)
+      return res.json({ rows, grouped: true })
+    }
+
+    const sortMap = {
+      visitDate_desc:   'tp.VisitDate DESC',
+      visitDate_asc:    'tp.VisitDate ASC',
+      purchase_desc:    'tp.PurchaseDate DESC',
+      amount_desc:      'tp.TotalAmount DESC',
+      amount_asc:       'tp.TotalAmount ASC',
+    }
+    const orderBy = sortMap[sortBy] || 'tp.PurchaseDate DESC'
+
+    const [rows] = await db.execute(`
+      SELECT tp.TicketPurchaseID,
+             DATE_FORMAT(tp.PurchaseDate,'%Y-%m-%d')  AS purchaseDate,
+             DATE_FORMAT(tp.VisitDate,'%Y-%m-%d')     AS visitDate,
+             CONCAT(v.FirstName,' ',v.LastName)        AS visitorName,
+             tp.TotalAmount,
+             COUNT(t.TicketID)                         AS ticketCount,
+             tp.Status
+      FROM TicketPurchase tp
+      JOIN Visitor v  ON v.VisitorID  = tp.VisitorID
+      LEFT JOIN Ticket t ON t.TicketPurchaseID = tp.TicketPurchaseID
+      ${where}
+      GROUP BY tp.TicketPurchaseID
+      ORDER BY ${orderBy}
+      LIMIT 300
+    `, params)
+    res.json({ rows, grouped: false })
+  } catch (err) {
+    console.error('admin tickets report error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// GET /api/admin/memberships/report — membership details + distribution
+// Query params: dateFrom, dateTo (start date), membershipType (TypeID), status, groupBy (type/month/status)
+router.get('/admin/memberships/report', async (req, res) => {
+  try {
+    const { dateFrom, dateTo, membershipType, status, groupBy } = req.query
+
+    const conds  = []
+    const params = []
+    if (dateFrom)      { conds.push('m.StartDate >= ?');       params.push(dateFrom)      }
+    if (dateTo)        { conds.push('m.StartDate <= ?');       params.push(dateTo)        }
+    if (membershipType){ conds.push('m.MembershipTypeID = ?'); params.push(membershipType)}
+    if (status)        { conds.push('m.Status = ?');           params.push(status)        }
+    const where = conds.length ? `WHERE ${conds.join(' AND ')}` : ''
+
+    if (groupBy === 'type') {
+      const [rows] = await db.execute(`
+        SELECT mt.TypeName,
+               COUNT(*)                                                 AS total,
+               SUM(CASE WHEN m.Status='Active' THEN 1 ELSE 0 END)      AS active,
+               SUM(CASE WHEN m.Status='Canceled' THEN 1 ELSE 0 END)    AS canceled,
+               SUM(CASE WHEN m.Status='Expired' THEN 1 ELSE 0 END)     AS expired
+        FROM Membership m
+        JOIN MembershipType mt ON mt.TypeID = m.MembershipTypeID
+        ${where}
+        GROUP BY mt.TypeID, mt.TypeName
+        ORDER BY total DESC
+      `, params)
+      return res.json({ rows, grouped: true })
+    }
+
+    if (groupBy === 'month') {
+      const [rows] = await db.execute(`
+        SELECT DATE_FORMAT(m.StartDate,'%Y-%m') AS month,
+               COUNT(*)                          AS total,
+               SUM(CASE WHEN m.Status='Active' THEN 1 ELSE 0 END) AS active
+        FROM Membership m
+        ${where}
+        GROUP BY DATE_FORMAT(m.StartDate,'%Y-%m')
+        ORDER BY month DESC
+        LIMIT 24
+      `, params)
+      return res.json({ rows, grouped: true })
+    }
+
+    const [rows] = await db.execute(`
+      SELECT m.MembershipID,
+             CONCAT(v.FirstName,' ',v.LastName)   AS visitorName,
+             mt.TypeName,
+             m.Status,
+             DATE_FORMAT(m.StartDate,'%Y-%m-%d')        AS startDate,
+             DATE_FORMAT(m.ExpirationDate,'%Y-%m-%d')   AS expirationDate
+      FROM Membership m
+      JOIN Visitor v        ON v.VisitorID   = m.VisitorID
+      JOIN MembershipType mt ON mt.TypeID    = m.MembershipTypeID
+      ${where}
+      ORDER BY m.StartDate DESC
+      LIMIT 300
+    `, params)
+    res.json({ rows, grouped: false })
+  } catch (err) {
+    console.error('admin memberships report error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// GET /api/admin/revenue/report — revenue breakdown by department or by date
+// Query params: dateFrom, dateTo, departmentId, groupBy (date/department)
+router.get('/admin/revenue/report', async (req, res) => {
+  try {
+    const { dateFrom, dateTo, departmentId, groupBy } = req.query
+
+    const conds  = []
+    const params = []
+    if (dateFrom)     { conds.push('tr.Date >= ?');          params.push(dateFrom)    }
+    if (dateTo)       { conds.push('tr.Date <= ?');          params.push(dateTo)      }
+    if (departmentId) { conds.push('tr.DepartmentID = ?');   params.push(parseInt(departmentId, 10)) }
+    const where = conds.length ? `WHERE ${conds.join(' AND ')}` : ''
+
+    if (!groupBy || groupBy === 'department') {
+      const [rows] = await db.execute(`
+        SELECT d.DepartmentID,
+               d.Name                         AS department,
+               ROUND(SUM(tr.Revenue),2)       AS revenue,
+               COUNT(*)                       AS transactions,
+               ROUND(AVG(tr.Revenue),2)       AS avgTransaction
+        FROM TransactionRecord tr
+        JOIN Department d ON d.DepartmentID = tr.DepartmentID
+        ${where}
+        GROUP BY tr.DepartmentID, d.Name
+        ORDER BY revenue DESC
+      `, params)
+      return res.json({ rows, grouped: true })
+    }
+
+    if (groupBy === 'date') {
+      const [rows] = await db.execute(`
+        SELECT DATE_FORMAT(tr.Date,'%Y-%m-%d')  AS date,
+               d.Name                            AS department,
+               ROUND(SUM(tr.Revenue),2)          AS revenue,
+               COUNT(*)                          AS transactions
+        FROM TransactionRecord tr
+        JOIN Department d ON d.DepartmentID = tr.DepartmentID
+        ${where}
+        GROUP BY DATE_FORMAT(tr.Date,'%Y-%m-%d'), tr.DepartmentID, d.Name
+        ORDER BY date DESC
+        LIMIT 300
+      `, params)
+      return res.json({ rows, grouped: false })
+    }
+
+    // groupBy = month
+    const [rows] = await db.execute(`
+      SELECT DATE_FORMAT(tr.Date,'%Y-%m')  AS month,
+             ROUND(SUM(tr.Revenue),2)      AS revenue,
+             COUNT(*)                      AS transactions
+      FROM TransactionRecord tr
+      JOIN Department d ON d.DepartmentID = tr.DepartmentID
+      ${where}
+      GROUP BY DATE_FORMAT(tr.Date,'%Y-%m')
+      ORDER BY month DESC
+      LIMIT 24
+    `, params)
+    res.json({ rows, grouped: true })
+  } catch (err) {
+    console.error('admin revenue report error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// GET /api/admin/membership-exhibit-report
+// Shows per (MembershipType × Exhibit): member count, tickets purchased, revenue
+// Joins: MembershipType → Membership → Visitor → TicketPurchase → TicketPurchaseItem → Exhibit
+router.get('/admin/membership-exhibit-report', async (req, res) => {
+  try {
+    const { dateFrom, dateTo, membershipType, exhibitId, sortBy } = req.query
+
+    const conds  = []
+    const params = []
+
+    if (dateFrom)      { conds.push('tp.VisitDate >= ?');        params.push(dateFrom) }
+    if (dateTo)        { conds.push('tp.VisitDate <= ?');        params.push(dateTo)   }
+    if (membershipType){ conds.push('mt.TypeID = ?');            params.push(membershipType) }
+    if (exhibitId)     { conds.push('e.ExhibitID = ?');          params.push(exhibitId) }
+
+    const where = conds.length ? 'AND ' + conds.join(' AND ') : ''
+
+    const sortMap = {
+      revenue_desc:  'Revenue DESC',
+      revenue_asc:   'Revenue ASC',
+      tickets_desc:  'TicketsSold DESC',
+      members_desc:  'Members DESC',
+      type_asc:      'mt.TypeName ASC, e.ExhibitName ASC',
+      exhibit_asc:   'e.ExhibitName ASC, mt.TypeName ASC',
+    }
+    const orderBy = sortMap[sortBy] || sortMap.revenue_desc
+
+    const [rows] = await db.execute(`
+      SELECT
+        mt.TypeID,
+        mt.TypeName                               AS MembershipType,
+        mt.DiscountPercent,
+        e.ExhibitID,
+        e.ExhibitName,
+        e.Status                                  AS ExhibitStatus,
+        COUNT(DISTINCT m.MembershipID)            AS Members,
+        COALESCE(SUM(tpi.Quantity), 0)            AS TicketsSold,
+        ROUND(COALESCE(SUM(tpi.Subtotal), 0), 2) AS Revenue
+      FROM MembershipType mt
+      JOIN Membership          m   ON m.MembershipTypeID  = mt.TypeID
+      JOIN Visitor             v   ON v.VisitorID         = m.VisitorID
+      JOIN TicketPurchase      tp  ON tp.VisitorID        = v.VisitorID
+      JOIN TicketPurchaseItem  tpi ON tpi.TicketPurchaseID = tp.TicketPurchaseID
+      JOIN Exhibit             e   ON e.ExhibitID         = tpi.ExhibitID
+      WHERE tp.Status = 'Active'
+        ${where}
+      GROUP BY mt.TypeID, mt.TypeName, mt.DiscountPercent, e.ExhibitID, e.ExhibitName, e.Status
+      ORDER BY ${orderBy}
+    `, params)
+
+    res.json({ rows })
+  } catch (err) {
+    console.error('membership exhibit report error:', err)
     res.status(500).json({ error: String(err) })
   }
 })

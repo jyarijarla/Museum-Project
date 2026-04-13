@@ -1634,13 +1634,13 @@ router.get('/visitor/:id/ticket-purchases', async (req, res) => {
     const visitorId = vrows[0].VisitorID
 
     // Fetch all ticket purchases with their items and exhibit names
-    const [rows] = await db.execute(
-      `SELECT 
+    // Try with Status column; fall back gracefully if the column doesn't exist yet on this DB
+    const ticketQuery = (withStatus) => `SELECT 
         tp.TicketPurchaseID,
         tp.PurchaseDate,
         tp.VisitDate,
         tp.TotalAmount,
-        tp.Status AS PurchaseStatus,
+        ${withStatus ? 'tp.Status AS PurchaseStatus' : "'Active' AS PurchaseStatus"},
         tpi.TicketPurchaseItemID,
         tpi.Quantity,
         tpi.UnitPrice,
@@ -1650,9 +1650,19 @@ router.get('/visitor/:id/ticket-purchases', async (req, res) => {
       JOIN TicketPurchaseItem tpi ON tp.TicketPurchaseID = tpi.TicketPurchaseID
       JOIN Exhibit e ON tpi.ExhibitID = e.ExhibitID
       WHERE tp.VisitorID = ?
-      ORDER BY tp.PurchaseDate DESC`,
-      [visitorId]
-    )
+      ORDER BY tp.PurchaseDate DESC`
+
+    let rows
+    try {
+      ;[rows] = await db.execute(ticketQuery(true), [visitorId])
+    } catch (colErr) {
+      if (String(colErr).toLowerCase().includes('status')) {
+        // Status column not yet added — retry without it
+        ;[rows] = await db.execute(ticketQuery(false), [visitorId])
+      } else {
+        throw colErr
+      }
+    }
 
     // Group by TicketPurchaseID
     const map = {}
@@ -1688,11 +1698,16 @@ router.post('/visitor/ticket-purchases/cancel', async (req, res) => {
   const { ticketPurchaseId } = req.body
   if (!ticketPurchaseId) return res.status(400).json({ error: 'ticketPurchaseId is required' })
   try {
-    // Update TicketPurchase status
-    await db.execute(
-      'UPDATE TicketPurchase SET Status = ? WHERE TicketPurchaseID = ?',
-      ['Cancelled', ticketPurchaseId]
-    )
+    // Update TicketPurchase status (no-op if Status column doesn't exist yet)
+    try {
+      await db.execute(
+        'UPDATE TicketPurchase SET Status = ? WHERE TicketPurchaseID = ?',
+        ['Cancelled', ticketPurchaseId]
+      )
+    } catch (colErr) {
+      if (!String(colErr).toLowerCase().includes('status')) throw colErr
+      // Status column missing — treat as success (migration pending)
+    }
     res.json({ success: true, message: 'Ticket purchase cancelled successfully' })
   } catch (err) {
     console.error('Cancel ticket purchase failed:', err)

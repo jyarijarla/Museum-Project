@@ -2,10 +2,34 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import authRoutes from "./routes/auth.js";
+import { db } from "./db.js";
 
 dotenv.config();
 
 const app = express();
+
+// ── Run any pending schema migrations on startup ──────────────────────────────
+async function runMigrations() {
+  try {
+    // Check if Status column exists on TicketPurchase before trying to add it
+    const [cols] = await db.execute(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'TicketPurchase'
+         AND COLUMN_NAME = 'Status'`
+    );
+    if (cols.length === 0) {
+      await db.execute(
+        `ALTER TABLE TicketPurchase
+           ADD COLUMN Status VARCHAR(20) NOT NULL DEFAULT 'Active'`
+      );
+      console.log('[migration] added Status column to TicketPurchase');
+    }
+  } catch (err) {
+    console.warn('[migration] warning:', err.message);
+  }
+  console.log('[migration] schema check complete');
+}
 
 // middleware
 // CLIENT_ORIGIN can be a comma-separated list of allowed origins.
@@ -36,6 +60,8 @@ app.use("/api", authRoutes);
 
 const PORT = process.env.PORT || 4000;
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+runMigrations().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
 });

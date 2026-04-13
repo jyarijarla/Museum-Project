@@ -355,6 +355,13 @@ router.post('/transaction/create', async (req, res) => {
       }
     } catch (_) { /* non-fatal */ }
 
+    // get gift shop department id (hard-fallback to 4 if lookup fails)
+    let deptId = 4
+    try {
+      const [drows] = await db.execute("SELECT DepartmentID FROM Department WHERE Name LIKE '%Gift%' LIMIT 1")
+      if (drows && drows.length > 0) deptId = drows[0].DepartmentID
+    } catch (_) { /* non-fatal */ }
+
     // compute revenue: look up RetailPrice, apply member gift shop discount if applicable
     let revenue = 0
     const preparedItems = []
@@ -374,8 +381,8 @@ router.post('/transaction/create', async (req, res) => {
     // insert transaction record
     let transactionId = null
     const [tres] = await db.execute(
-      'INSERT INTO TransactionRecord (VisitorID, Date, TotalAmount) VALUES (?, CURDATE(), ?)',
-      [vId, revenue]
+      'INSERT INTO TransactionRecord (DepartmentID, VisitorID, Date, Revenue) VALUES (?, ?, CURDATE(), ?)',
+      [deptId, vId, revenue]
     )
     transactionId = tres && tres.insertId ? tres.insertId : null
 
@@ -412,7 +419,7 @@ router.get('/visitor/:id/transactions', async (req, res) => {
 
     // join products for this visitor's transactions only
     const [rows] = await db.execute(
-      `SELECT tr.TransactionID, tr.Date, tr.TotalAmount AS Revenue, tp.ProductID, tp.Quantity, p.Name, p.RetailPrice
+      `SELECT tr.TransactionID, tr.Date, tr.Revenue, tp.ProductID, tp.Quantity, p.Name, p.RetailPrice
        FROM TransactionRecord tr
        JOIN TransactionProduct tp ON tp.TransactionID = tr.TransactionID
        LEFT JOIN Product p ON p.ProductID = tp.ProductID

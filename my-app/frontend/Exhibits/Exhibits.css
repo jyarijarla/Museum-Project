@@ -3,6 +3,7 @@
 /* ── Exhibits hero ── */
 .exhibits-hero{padding:52px 36px 44px;background:linear-gradient(180deg,#eef6ff 0%,var(--bg) 100%);border-bottom:1px solid rgba(2,6,23,0.04);text-align:center}
 .exhibits-hero-content{max-width:600px;margin:0 auto}
+.exhibits-hero-btn{margin-top:20px;display:inline-block}
 
 /* ── Main ── */
 .exhibits-main{padding:40px 36px 60px;max-width:1200px;margin:0 auto;width:100%}
@@ -42,9 +43,7 @@
 .exhibit-card-tag{font-size:11px;font-weight:700;color:rgba(2,6,23,0.35);text-transform:uppercase;letter-spacing:.04em}
 .exhibit-card-cta{font-size:13px;font-weight:700;color:var(--accent-2)}
 
-/* CTA strip */
-.exhibits-cta-strip{display:flex;align-items:center;justify-content:center;gap:20px;padding:24px 0 8px;border-top:1px solid rgba(2,6,23,0.06);margin-top:8px}
-.exhibits-cta-strip p{margin:0;font-size:15px;color:rgba(2,6,23,0.55)}
+/* CTA strip removed */
 
 @media (max-width:920px){.exhibit-cards{grid-template-columns:1fr 1fr}}
 @media (max-width:600px){

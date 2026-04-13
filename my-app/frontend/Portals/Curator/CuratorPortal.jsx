@@ -15,12 +15,28 @@ export default function CuratorPortal() {
 
   const [exhibits, setExhibits] = useState([])
   const [artifacts, setArtifacts] = useState([])
+  const [artifactsLoading, setArtifactsLoading] = useState(false)
+
+  // ── Add Artifact ──
+  const BLANK_FORM = { name: '', description: '', entryDate: '', exhibitId: '', imageURL: '' }
   const [addModal, setAddModal] = useState(false)
-  const [form, setForm] = useState({ name: '', description: '', entryDate: '', exhibitId: '' })
+  const [form, setForm] = useState(BLANK_FORM)
   const [preselectedExhibit, setPreselectedExhibit] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
   const [formSuccess, setFormSuccess] = useState('')
+
+  // ── Edit Artifact ──
+  const [editModal,   setEditModal]   = useState(false)
+  const [editForm,    setEditForm]    = useState(BLANK_FORM)
+  const [editId,      setEditId]      = useState(null)
+  const [editSaving,  setEditSaving]  = useState(false)
+  const [editError,   setEditError]   = useState('')
+
+  // ── Delete Artifact ──
+  const [deleteTarget,  setDeleteTarget]  = useState(null)
+  const [deleteSaving,  setDeleteSaving]  = useState(false)
+  const [deleteError,   setDeleteError]   = useState('')
 
   // ── Exhibit Report ──
   const [rptFilters, setRptFilters] = useState({ dateFrom: '', dateTo: '', sortBy: 'revenue_desc' })
@@ -29,29 +45,25 @@ export default function CuratorPortal() {
   const [rptError,   setRptError]   = useState('')
   const setRf = (key, val) => setRptFilters(prev => ({ ...prev, [key]: val }))
 
+  const fetchArtifacts = async () => {
+    setArtifactsLoading(true)
+    try {
+      const res = await fetch(`${apiBase}/api/curator/artifacts`)
+      const data = await res.json()
+      if (data.artifacts) setArtifacts(data.artifacts)
+    } catch {}
+    finally { setArtifactsLoading(false) }
+  }
+
   useEffect(() => {
     fetch(`${apiBase}/api/exhibits`)
       .then(r => r.json())
       .then(d => { if (d.exhibits) setExhibits(d.exhibits) })
       .catch(() => {})
-  }, [])
+    fetchArtifacts()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const mockArtifacts = [
-    { ArtifactID: 1, Name: 'Iron Meteorite Fragment', ExhibitName: 'Space Wing',     EntryDate: '2026-03-15' },
-    { ArtifactID: 2, Name: 'Trilobite Fossil',        ExhibitName: 'Natural History', EntryDate: '2026-03-10' },
-    { ArtifactID: 3, Name: 'Roman Coin Collection',   ExhibitName: 'Ancient Gallery', EntryDate: '2026-02-28' },
-    { ArtifactID: 4, Name: 'Ammonite Shell',          ExhibitName: 'Natural History', EntryDate: '2026-02-20' },
-    { ArtifactID: 5, Name: 'Apollo Mission Patch',    ExhibitName: 'Space Wing',      EntryDate: '2026-02-10' },
-  ]
-
-  const defaultExhibits = [
-    { ExhibitID: 1, ExhibitName: 'Space Wing',      Description: 'Explore the cosmos and the history of space exploration.' },
-    { ExhibitID: 2, ExhibitName: 'Natural History', Description: 'Discover ancient life and the natural world.' },
-    { ExhibitID: 3, ExhibitName: 'Ancient Gallery', Description: 'Artifacts from ancient civilizations.' },
-  ]
-
-  const displayExhibits = exhibits.length > 0 ? exhibits : defaultExhibits
-  const displayArtifacts = artifacts.length > 0 ? artifacts : mockArtifacts
+  const displayExhibits = exhibits
 
   const fetchReport = async () => {
     setRptLoading(true); setRptError('')
@@ -87,7 +99,7 @@ export default function CuratorPortal() {
   }
 
   const openModal = (exhibitId, exhibitName) => {
-    setForm({ name: '', description: '', entryDate: '', exhibitId: String(exhibitId) })
+    setForm({ name: '', description: '', entryDate: '', exhibitId: String(exhibitId), imageURL: '' })
     setPreselectedExhibit(exhibitName || null)
     setFormError('')
     setFormSuccess('')
@@ -107,11 +119,63 @@ export default function CuratorPortal() {
       })
       const data = await res.json()
       if (!res.ok) { setFormError(data.error || 'Failed to add artifact.'); setSubmitting(false); return }
-      if (data.artifact) setArtifacts(prev => [data.artifact, ...prev])
+      await fetchArtifacts()
       setFormSuccess(`"${form.name}" added successfully!`)
-      setTimeout(() => { setAddModal(false); setFormSuccess('') }, 2000)
+      setTimeout(() => { setAddModal(false); setFormSuccess('') }, 1500)
     } catch { setFormError('Network error.') }
     finally { setSubmitting(false) }
+  }
+
+  const openEditArtifact = (a) => {
+    setEditId(a.ArtifactID)
+    setEditForm({
+      name:        a.Name || '',
+      description: a.Description || '',
+      entryDate:   a.EntryDate ? String(a.EntryDate).slice(0, 10) : '',
+      exhibitId:   String(a.ExhibitID || ''),
+      imageURL:    a.ImageURL || '',
+    })
+    setEditError('')
+    setEditModal(true)
+  }
+  const closeEditArtifact = () => { setEditModal(false); setEditError('') }
+  const handleEditArtifact = async (e) => {
+    e.preventDefault()
+    if (!editForm.name || !editForm.exhibitId) { setEditError('Name and exhibit are required.'); return }
+    setEditSaving(true); setEditError('')
+    try {
+      const uid = user?.userId || user?.UserID || user?.id
+      const res = await fetch(`${apiBase}/api/curator/artifacts/${editId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...editForm, userId: uid }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setEditError(data.error || 'Failed to update artifact.'); return }
+      setArtifacts(prev => prev.map(a => a.ArtifactID === editId ? data.artifact : a))
+      closeEditArtifact()
+    } catch { setEditError('Network error.') }
+    finally { setEditSaving(false) }
+  }
+
+  const openDeleteArtifact = (a) => { setDeleteTarget(a); setDeleteError('') }
+  const closeDeleteArtifact = () => { setDeleteTarget(null); setDeleteError('') }
+  const handleDeleteArtifact = async () => {
+    if (!deleteTarget) return
+    setDeleteSaving(true); setDeleteError('')
+    try {
+      const uid = user?.userId || user?.UserID || user?.id
+      const res = await fetch(`${apiBase}/api/curator/artifacts/${deleteTarget.ArtifactID}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: uid }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setDeleteError(data.error || 'Failed to delete artifact.'); return }
+      setArtifacts(prev => prev.filter(a => a.ArtifactID !== deleteTarget.ArtifactID))
+      closeDeleteArtifact()
+    } catch { setDeleteError('Network error.') }
+    finally { setDeleteSaving(false) }
   }
 
   return (
@@ -143,7 +207,7 @@ export default function CuratorPortal() {
             </div>
             <div className="curator-stat-div" />
             <div className="curator-stat">
-              <span className="curator-stat-num">{displayArtifacts.length}</span>
+              <span className="curator-stat-num">{artifacts.length}</span>
               <span className="curator-stat-label">Artifacts</span>
             </div>
           </div>
@@ -161,7 +225,7 @@ export default function CuratorPortal() {
           <div className="curator-metric">
             <div className="curator-metric-icon">🪨</div>
             <div>
-              <div className="curator-metric-value">{displayArtifacts.length}</div>
+              <div className="curator-metric-value">{artifacts.length}</div>
               <div className="curator-metric-label">Total Artifacts</div>
             </div>
           </div>
@@ -221,28 +285,42 @@ export default function CuratorPortal() {
           <div className="curator-panel">
             <div className="curator-panel-header">
               <div>
-                <div className="curator-panel-title">Recent Artifacts</div>
-                <div className="curator-panel-subtitle">Latest additions to the collection</div>
+                <div className="curator-panel-title">Artifacts</div>
+                <div className="curator-panel-subtitle">All artifacts in the collection — edit or remove entries</div>
               </div>
+              <button className="curator-csv-btn" onClick={fetchArtifacts} disabled={artifactsLoading} style={{fontSize:13}}>
+                {artifactsLoading ? 'Loading…' : '↻ Refresh'}
+              </button>
             </div>
+            {artifacts.length === 0 && !artifactsLoading ? (
+              <div style={{padding:'24px',textAlign:'center',color:'rgba(2,6,23,0.45)'}}>No artifacts found.</div>
+            ) : (
             <table className="artifacts-table">
               <thead>
                 <tr>
                   <th>Artifact</th>
                   <th>Exhibit</th>
                   <th>Date Added</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {displayArtifacts.map((a, i) => (
+                {artifacts.map((a, i) => (
                   <tr key={a.ArtifactID} className={i % 2 === 0 ? 'row-even' : ''}>
                     <td><span className="artifact-name">{a.Name}</span></td>
                     <td><span className="exhibit-tag">{a.ExhibitName || '—'}</span></td>
                     <td className="date-cell">{a.EntryDate ? String(a.EntryDate).slice(0, 10) : '—'}</td>
+                    <td>
+                      <div className="curator-action-btns">
+                        <button className="curator-edit-btn" onClick={() => openEditArtifact(a)}>✎ Edit</button>
+                        <button className="curator-delete-btn" onClick={() => openDeleteArtifact(a)}>🗑 Delete</button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            )}
           </div>
 
         </div>
@@ -343,6 +421,82 @@ export default function CuratorPortal() {
 
       <footer className="home-footer">© {new Date().getFullYear()} City Museum — Curator Portal</footer>
 
+      {/* ── Edit Artifact modal ── */}
+      {editModal && (
+        <div className="artifact-modal-overlay" onClick={closeEditArtifact}>
+          <div className="artifact-modal" onClick={e => e.stopPropagation()}>
+            <div className="artifact-modal-header">
+              <h2 className="artifact-modal-title">Edit Artifact</h2>
+              <button className="artifact-modal-close" onClick={closeEditArtifact}>✕</button>
+            </div>
+            <form className="artifact-form" onSubmit={handleEditArtifact}>
+              <label className="artifact-label">
+                Exhibit <span className="artifact-required">*</span>
+                <select className="artifact-input" value={editForm.exhibitId} onChange={e => setEditForm(f => ({ ...f, exhibitId: e.target.value }))}>
+                  <option value="">— Select exhibit —</option>
+                  {displayExhibits.map(ex => (
+                    <option key={ex.ExhibitID} value={String(ex.ExhibitID)}>{ex.ExhibitName}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="artifact-label">
+                Artifact Name <span className="artifact-required">*</span>
+                <input className="artifact-input" type="text" placeholder="e.g. Iron Meteorite Fragment"
+                  value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} autoFocus />
+              </label>
+              <label className="artifact-label">
+                Description
+                <textarea className="artifact-input artifact-textarea" rows={3} placeholder="Brief description…"
+                  value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} />
+              </label>
+              <label className="artifact-label">
+                Entry Date
+                <input className="artifact-input" type="date" value={editForm.entryDate}
+                  onChange={e => setEditForm(f => ({ ...f, entryDate: e.target.value }))} />
+              </label>
+              <label className="artifact-label">
+                Image URL
+                <input className="artifact-input" type="url" placeholder="https://…"
+                  value={editForm.imageURL} onChange={e => setEditForm(f => ({ ...f, imageURL: e.target.value }))} />
+              </label>
+              {editForm.imageURL?.trim() && (
+                <div style={{marginBottom:12}}>
+                  <img src={editForm.imageURL} alt="preview" style={{maxHeight:120,borderRadius:8,objectFit:'cover',border:'1px solid rgba(0,0,0,0.08)'}}
+                    onError={e => { e.target.style.display='none' }} />
+                </div>
+              )}
+              {editError && <p className="artifact-form-error">{editError}</p>}
+              <div className="artifact-form-actions">
+                <button type="button" className="btn ghost" onClick={closeEditArtifact}>Cancel</button>
+                <button type="submit" className="btn primary" disabled={editSaving}>{editSaving ? 'Saving…' : 'Save Changes'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Confirm modal ── */}
+      {deleteTarget && (
+        <div className="artifact-modal-overlay" onClick={closeDeleteArtifact}>
+          <div className="artifact-modal" style={{maxWidth:420}} onClick={e => e.stopPropagation()}>
+            <div className="artifact-modal-header">
+              <h2 className="artifact-modal-title">Delete Artifact</h2>
+              <button className="artifact-modal-close" onClick={closeDeleteArtifact}>✕</button>
+            </div>
+            <div className="artifact-form">
+              <p style={{marginBottom:16}}>Are you sure you want to delete <strong>{deleteTarget.Name}</strong>? This cannot be undone.</p>
+              {deleteError && <p className="artifact-form-error">{deleteError}</p>}
+              <div className="artifact-form-actions">
+                <button type="button" className="btn ghost" onClick={closeDeleteArtifact}>Cancel</button>
+                <button type="button" className="btn curator-btn-danger" onClick={handleDeleteArtifact} disabled={deleteSaving}>
+                  {deleteSaving ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {addModal && (
         <div className="artifact-modal-overlay" onClick={() => setAddModal(false)}>
           <div className="artifact-modal" onClick={e => e.stopPropagation()}>
@@ -386,6 +540,16 @@ export default function CuratorPortal() {
                   type="date"
                   value={form.entryDate}
                   onChange={e => setForm(f => ({ ...f, entryDate: e.target.value }))}
+                />
+              </label>
+              <label className="artifact-label">
+                Image URL
+                <input
+                  className="artifact-input"
+                  type="url"
+                  placeholder="https://…"
+                  value={form.imageURL}
+                  onChange={e => setForm(f => ({ ...f, imageURL: e.target.value }))}
                 />
               </label>
               {formError && <p className="artifact-form-error">{formError}</p>}

@@ -285,7 +285,7 @@ export default function Visitor(){
                           <span className="dash-history-price">
                             ${Number(tp.TotalAmount || 0).toFixed(2)}
                           </span>
-                          {tp.PurchaseStatus === 'Active' && (
+                          {tp.PurchaseStatus === 'Active' && tp.VisitDate && new Date(tp.VisitDate) > new Date(new Date().toDateString()) && (
                             <button
                               className="dqa-btn dqa-danger"
                               style={{ fontSize: 11, padding: '3px 10px' }}
@@ -345,7 +345,7 @@ export default function Visitor(){
                       </div>
                     ))
                   }
-                  {historyItems.length === 0 && <p className="dash-empty-note">No purchases found.</p>}
+                  {historyItems.length === 0 && <p className="dash-empty-note">No purchases yet. <Link to="/giftshop">Visit the gift shop →</Link></p>}
                 </div>
               </div>
             </div>

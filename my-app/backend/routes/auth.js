@@ -158,7 +158,7 @@ router.get('/visitor/:id', async (req, res) => {
 // Return all membership types (for the membership page)
 router.get('/membership/types', async (req, res) => {
   try {
-    const [rows] = await db.execute('SELECT TypeID, TypeName, DiscountPercent, BenefitsDescription FROM MembershipType ORDER BY TypeID')
+    const [rows] = await db.execute('SELECT TypeID, TypeName, GiftShopDiscountPercent, TicketDiscountPercent FROM MembershipType ORDER BY TypeID')
     res.json({ types: rows })
   } catch (err) {
     console.error('Failed to load membership types:', err)
@@ -286,9 +286,9 @@ router.get('/visitor/:id/membership', async (req, res) => {
     if (!vrows || vrows.length === 0) return res.status(404).json({ error: 'Visitor not found' })
     const visitorId = vrows[0].VisitorID
 
-    // JOIN with MembershipType to include the plan name
+    // JOIN with MembershipType to include the plan name and discount info
     const [mrows] = await db.execute(
-      `SELECT m.*, mt.TypeName
+      `SELECT m.*, mt.TypeName, mt.GiftShopDiscountPercent, mt.TicketDiscountPercent
        FROM Membership m
        LEFT JOIN MembershipType mt ON mt.TypeID = m.MembershipTypeID
        WHERE m.VisitorID = ? LIMIT 1`,
@@ -328,6 +328,25 @@ router.post('/transaction/create', async (req, res) => {
     }
     if (!vId) return res.status(404).json({ error: 'Visitor not found' })
 
+    // Fetch the visitor's active gift shop discount (0 if no membership)
+    let giftShopDiscountPercent = 0
+    try {
+      const [mrows] = await db.execute(
+        `SELECT m.IsExpired, m.ExpirationDate, m.Status, mt.GiftShopDiscountPercent
+         FROM Membership m
+         LEFT JOIN MembershipType mt ON mt.TypeID = m.MembershipTypeID
+         WHERE m.VisitorID = ? LIMIT 1`,
+        [vId]
+      )
+      if (mrows && mrows.length > 0) {
+        const m = mrows[0]
+        const isExpiredBit = m.IsExpired != null && (Buffer.isBuffer(m.IsExpired) ? m.IsExpired[0] === 1 : m.IsExpired === 1)
+        const isExpiredByDate = m.ExpirationDate && new Date(m.ExpirationDate) < new Date()
+        const activeMember = (m.Status || 'Active') !== 'Canceled' && !isExpiredBit && !isExpiredByDate
+        if (activeMember) giftShopDiscountPercent = Number(m.GiftShopDiscountPercent || 0)
+      }
+    } catch (_) { /* non-fatal */ }
+
     // determine department id for gift shop if possible
     let deptId = 1
     try {
@@ -335,19 +354,20 @@ router.post('/transaction/create', async (req, res) => {
       if (drows && drows.length > 0) deptId = drows[0].DepartmentID
     } catch (e) { /* ignore */ }
 
-    // compute revenue: if item.price provided use it, otherwise lookup Product.RetailPrice
+    // compute revenue: look up RetailPrice, apply member gift shop discount if applicable
     let revenue = 0
     const preparedItems = []
     for (const it of items) {
       const pid = it.productId || it.id || it.productID
       const qty = Number(it.quantity || it.qty || 1)
-      let price = Number(it.price || 0)
-      if (!price || price <= 0) {
+      let retailPrice = Number(it.price || 0)
+      if (!retailPrice || retailPrice <= 0) {
         const [prow] = await db.execute('SELECT RetailPrice FROM Product WHERE ProductID = ? LIMIT 1', [pid])
-        if (prow && prow.length > 0) price = Number(prow[0].RetailPrice || 0)
+        if (prow && prow.length > 0) retailPrice = Number(prow[0].RetailPrice || 0)
       }
+      const price = parseFloat((retailPrice * (1 - giftShopDiscountPercent / 100)).toFixed(2))
       revenue += (price * qty)
-      preparedItems.push({ productId: pid, qty, price })
+      preparedItems.push({ productId: pid, qty, price, retailPrice, giftShopDiscountPercent })
     }
 
     // insert transaction record — include VisitorID when available in schema
@@ -371,7 +391,7 @@ router.post('/transaction/create', async (req, res) => {
       await db.execute('INSERT INTO TransactionProduct (TransactionID, ProductID, Quantity) VALUES (?, ?, ?)', [transactionId, it.productId, it.qty])
     }
 
-    return res.json({ success: true, transactionId })
+    return res.json({ success: true, transactionId, giftShopDiscountPercent })
   } catch (err) {
     console.error('Create transaction failed:', err)
     res.status(500).json({ error: String(err) })
@@ -397,15 +417,15 @@ router.get('/visitor/:id/transactions', async (req, res) => {
     if (!vrows || vrows.length === 0) return res.status(404).json({ error: 'Visitor not found' })
     const visitorId = vrows[0].VisitorID
 
-    const [trs] = await db.execute('SELECT * FROM TransactionRecord WHERE DepartmentID IS NOT NULL ORDER BY Date DESC')
-    // join products for visitor's transactions by TransactionID via TransactionProduct
+    // join products for this visitor's transactions only
     const [rows] = await db.execute(
       `SELECT tr.TransactionID, tr.Date, tr.Revenue, tp.ProductID, tp.Quantity, p.Name, p.RetailPrice
        FROM TransactionRecord tr
        JOIN TransactionProduct tp ON tp.TransactionID = tr.TransactionID
        LEFT JOIN Product p ON p.ProductID = tp.ProductID
-       WHERE tr.TransactionID IN (SELECT TransactionID FROM TransactionProduct)
-       ORDER BY tr.Date DESC`)
+       WHERE tr.VisitorID = ?
+       ORDER BY tr.Date DESC`,
+      [visitorId])
 
     // Group by TransactionID
     const map = {}
@@ -430,8 +450,9 @@ router.get('/tickets/pricing', async (req, res) => {
   if (!visitDate) return res.status(400).json({ error: 'visitDate is required' })
 
   try {
-    // Determine membership status
+    // Determine membership status and ticket discount
     let isMember = false
+    let ticketDiscountPercent = 0
     if (userId) {
       try {
         const [vrows] = await db.execute(
@@ -440,7 +461,10 @@ router.get('/tickets/pricing', async (req, res) => {
         )
         if (vrows && vrows.length > 0) {
           const [mrows] = await db.execute(
-            'SELECT IsExpired, ExpirationDate, Status FROM Membership WHERE VisitorID = ? LIMIT 1',
+            `SELECT m.IsExpired, m.ExpirationDate, m.Status, mt.TicketDiscountPercent
+             FROM Membership m
+             LEFT JOIN MembershipType mt ON mt.TypeID = m.MembershipTypeID
+             WHERE m.VisitorID = ? LIMIT 1`,
             [vrows[0].VisitorID]
           )
           if (mrows && mrows.length > 0) {
@@ -448,6 +472,7 @@ router.get('/tickets/pricing', async (req, res) => {
             const isExpiredBit = m.IsExpired != null && (Buffer.isBuffer(m.IsExpired) ? m.IsExpired[0] === 1 : m.IsExpired === 1)
             const isExpiredByDate = m.ExpirationDate && new Date(m.ExpirationDate) < new Date()
             isMember = (m.Status || 'Active') !== 'Canceled' && !isExpiredBit && !isExpiredByDate
+            if (isMember) ticketDiscountPercent = Number(m.TicketDiscountPercent || 0)
           }
         }
       } catch (_) { /* non-fatal */ }
@@ -479,7 +504,9 @@ router.get('/tickets/pricing', async (req, res) => {
     const exhibits = rows.map(e => {
       const booked = bookedMap[e.ExhibitID] || 0
       const regularPrice = Number(e.RegularPrice || 0)
-      const memberPrice  = Number(e.MemberPrice  || 0)
+      const memberPrice  = isMember
+        ? parseFloat((regularPrice * (1 - ticketDiscountPercent / 100)).toFixed(2))
+        : Number(e.MemberPrice || 0)
       return {
         ExhibitID:   e.ExhibitID,
         ExhibitName: e.ExhibitName,
@@ -490,10 +517,11 @@ router.get('/tickets/pricing', async (req, res) => {
         RegularPrice: regularPrice,
         MemberPrice:  memberPrice,
         Price: isMember ? memberPrice : regularPrice,
+        ticketDiscountPercent: isMember ? ticketDiscountPercent : 0,
       }
     })
 
-    res.json({ exhibits, isMember })
+    res.json({ exhibits, isMember, ticketDiscountPercent })
   } catch (err) {
     console.error('Ticket pricing fetch failed:', err)
     res.status(500).json({ error: String(err) })
@@ -523,11 +551,15 @@ router.post('/tickets/purchase', async (req, res) => {
       return res.status(404).json({ error: 'Visitor profile not found. Please complete your profile before purchasing tickets.' })
     }
 
-    // Membership check
+    // Membership check — also fetch TicketDiscountPercent from MembershipType
     let isMember = false
+    let ticketDiscountPercent = 0
     try {
       const [mrows] = await db.execute(
-        'SELECT IsExpired, ExpirationDate, Status FROM Membership WHERE VisitorID = ? LIMIT 1',
+        `SELECT m.IsExpired, m.ExpirationDate, m.Status, mt.TicketDiscountPercent
+         FROM Membership m
+         LEFT JOIN MembershipType mt ON mt.TypeID = m.MembershipTypeID
+         WHERE m.VisitorID = ? LIMIT 1`,
         [visitorId]
       )
       if (mrows && mrows.length > 0) {
@@ -535,6 +567,7 @@ router.post('/tickets/purchase', async (req, res) => {
         const isExpiredBit = m.IsExpired != null && (Buffer.isBuffer(m.IsExpired) ? m.IsExpired[0] === 1 : m.IsExpired === 1)
         const isExpiredByDate = m.ExpirationDate && new Date(m.ExpirationDate) < new Date()
         isMember = (m.Status || 'Active') !== 'Canceled' && !isExpiredBit && !isExpiredByDate
+        if (isMember) ticketDiscountPercent = Number(m.TicketDiscountPercent || 0)
       }
     } catch (_) { /* non-fatal */ }
 
@@ -561,7 +594,10 @@ router.post('/tickets/purchase', async (req, res) => {
         return res.status(400).json({ error: `Exhibit ${exhibitId} not found` })
       }
       const exhibit = erows[0]
-      const unitPrice = isMember ? Number(exhibit.MemberPrice || 0) : Number(exhibit.RegularPrice || 0)
+      const regularPrice = Number(exhibit.RegularPrice || 0)
+      const unitPrice = isMember
+        ? parseFloat((regularPrice * (1 - ticketDiscountPercent / 100)).toFixed(2))
+        : regularPrice
 
       // Capacity check
       const [[bookedRow]] = await db.execute(
@@ -787,28 +823,99 @@ router.get('/exhibits/:id/artifacts', async (req, res) => {
   }
 })
 
-// POST /api/artifacts — Admin only: add a new artifact to an exhibit
+// POST /api/artifacts — Curator or Admin: add a new artifact to an exhibit
 router.post('/artifacts', async (req, res) => {
-  const { name, description, entryDate, exhibitId, userId } = req.body || {}
+  const { name, description, entryDate, exhibitId, imageURL, userId } = req.body || {}
   if (!name || !exhibitId) return res.status(400).json({ error: 'name and exhibitId are required' })
   try {
     if (!userId) return res.status(401).json({ error: 'Authentication required' })
     const [urows] = await db.execute('SELECT Role FROM UserAccount WHERE UserID = ?', [userId])
-    if (!urows || urows.length === 0 || urows[0].Role !== 'Admin') {
-      return res.status(403).json({ error: 'Admin access required' })
+    if (!urows || urows.length === 0 || !['Admin', 'Curator'].includes(urows[0].Role)) {
+      return res.status(403).json({ error: 'Curator access required' })
     }
     const dateVal = entryDate || new Date().toISOString().slice(0, 10)
     const [result] = await db.execute(
-      'INSERT INTO Artifact (ExhibitID, Name, Description, EntryDate) VALUES (?, ?, ?, ?)',
-      [exhibitId, name, description || null, dateVal]
+      'INSERT INTO Artifact (ExhibitID, Name, Description, EntryDate, ImageURL) VALUES (?, ?, ?, ?, ?)',
+      [exhibitId, name, description || null, dateVal, imageURL?.toString().trim() || null]
     )
     const artifactId = result.insertId
     res.json({
       success: true,
-      artifact: { ArtifactID: artifactId, ExhibitID: exhibitId, Name: name, Description: description || null, EntryDate: dateVal }
+      artifact: { ArtifactID: artifactId, ExhibitID: exhibitId, Name: name, Description: description || null, EntryDate: dateVal, ImageURL: imageURL || null }
     })
   } catch (err) {
     console.error('Add artifact failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// GET /api/curator/artifacts — all artifacts with exhibit name, sorted newest first
+router.get('/curator/artifacts', async (req, res) => {
+  try {
+    const { exhibitId, search } = req.query
+    const conds = []; const params = []
+    if (exhibitId) { conds.push('a.ExhibitID = ?'); params.push(parseInt(exhibitId, 10)) }
+    if (search)    { conds.push('a.Name LIKE ?');   params.push(`%${search}%`) }
+    const where = conds.length ? `WHERE ${conds.join(' AND ')}` : ''
+    const [rows] = await db.execute(`
+      SELECT a.ArtifactID, a.ExhibitID, e.ExhibitName, a.Name, a.Description, a.EntryDate, a.ImageURL
+      FROM Artifact a
+      JOIN Exhibit e ON e.ExhibitID = a.ExhibitID
+      ${where}
+      ORDER BY a.EntryDate DESC, a.ArtifactID DESC
+    `, params)
+    res.json({ artifacts: rows })
+  } catch (err) {
+    console.error('curator artifacts fetch error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// PUT /api/curator/artifacts/:id — Curator or Admin: update an artifact
+router.put('/curator/artifacts/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10)
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'Invalid artifact ID.' })
+    const { name, description, entryDate, exhibitId, imageURL, userId } = req.body || {}
+    if (!name || !exhibitId) return res.status(400).json({ error: 'name and exhibitId are required' })
+    if (!userId) return res.status(401).json({ error: 'Authentication required' })
+    const [urows] = await db.execute('SELECT Role FROM UserAccount WHERE UserID = ?', [userId])
+    if (!urows || urows.length === 0 || !['Admin', 'Curator'].includes(urows[0].Role)) {
+      return res.status(403).json({ error: 'Curator access required' })
+    }
+    const dateVal = entryDate || new Date().toISOString().slice(0, 10)
+    const [result] = await db.execute(
+      'UPDATE Artifact SET ExhibitID=?, Name=?, Description=?, EntryDate=?, ImageURL=? WHERE ArtifactID=?',
+      [parseInt(exhibitId, 10), name.toString().trim(), description?.toString().trim() || null, dateVal, imageURL?.toString().trim() || null, id]
+    )
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Artifact not found.' })
+    const [[row]] = await db.execute(
+      `SELECT a.ArtifactID, a.ExhibitID, e.ExhibitName, a.Name, a.Description, a.EntryDate, a.ImageURL
+       FROM Artifact a JOIN Exhibit e ON e.ExhibitID = a.ExhibitID WHERE a.ArtifactID = ?`, [id]
+    )
+    res.json({ success: true, artifact: row })
+  } catch (err) {
+    console.error('curator update artifact error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// DELETE /api/curator/artifacts/:id — Curator or Admin: delete an artifact
+router.delete('/curator/artifacts/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10)
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'Invalid artifact ID.' })
+    const { userId } = req.body || {}
+    if (!userId) return res.status(401).json({ error: 'Authentication required' })
+    const [urows] = await db.execute('SELECT Role FROM UserAccount WHERE UserID = ?', [userId])
+    if (!urows || urows.length === 0 || !['Admin', 'Curator'].includes(urows[0].Role)) {
+      return res.status(403).json({ error: 'Curator access required' })
+    }
+    const [result] = await db.execute('DELETE FROM Artifact WHERE ArtifactID = ?', [id])
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Artifact not found.' })
+    res.json({ success: true })
+  } catch (err) {
+    console.error('curator delete artifact error:', err)
     res.status(500).json({ error: String(err) })
   }
 })
@@ -958,6 +1065,23 @@ router.get('/giftshop/metrics', async (req, res) => {
   }
 })
 
+// GET /api/giftshop/products/low-stock — all products with StockQuantity <= LowStockThreshold
+// Sorted by StockQuantity ASC so most urgent comes first
+router.get('/giftshop/products/low-stock', async (req, res) => {
+  try {
+    const [rows] = await db.execute(`
+      SELECT ProductID, Name, Description, RetailPrice, StockQuantity, LowStockThreshold
+      FROM Product
+      WHERE StockQuantity <= LowStockThreshold
+      ORDER BY StockQuantity ASC, Name ASC
+    `)
+    res.json({ products: rows })
+  } catch (err) {
+    console.error('giftshop low-stock error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
 // GET /api/giftshop/products/analytics — per-product sales stats + current inventory
 // Filters: productName, dateFrom, dateTo, stockStatus (out/low/ok), sortBy
 router.get('/giftshop/products/analytics', async (req, res) => {
@@ -997,21 +1121,22 @@ router.get('/giftshop/products/analytics', async (req, res) => {
       SELECT
         p.ProductID,
         p.Name,
+        p.Description,
         p.RetailPrice,
         p.StockQuantity,
         p.LowStockThreshold,
+        p.imageURL,
         COALESCE(SUM(CASE WHEN ${caseExpr} THEN tp.Quantity                  ELSE 0 END), 0) AS TotalQtySold,
         COALESCE(SUM(CASE WHEN ${caseExpr} THEN p.RetailPrice * tp.Quantity  ELSE 0 END), 0) AS TotalRevenue,
         COUNT(DISTINCT CASE WHEN ${caseExpr} THEN tr.TransactionID           END)             AS NumTransactions,
         COALESCE(AVG(CASE WHEN ${caseExpr} THEN tp.Quantity                  END),    0)      AS AvgQtyPerTxn,
         MAX(CASE           WHEN ${caseExpr} THEN tr.Date                     END)             AS LastSoldDate
       FROM Product p
-      INNER JOIN TransactionProduct tp ON tp.ProductID     = p.ProductID
-      INNER JOIN TransactionRecord  tr ON tr.TransactionID = tp.TransactionID
-                                      AND tr.DepartmentID  = ?
+      LEFT JOIN TransactionProduct tp ON tp.ProductID     = p.ProductID
+      LEFT JOIN TransactionRecord  tr ON tr.TransactionID = tp.TransactionID
+                                     AND tr.DepartmentID  = ?
       ${whereClause}
-      GROUP BY p.ProductID, p.Name, p.RetailPrice, p.StockQuantity, p.LowStockThreshold
-      HAVING NumTransactions > 0
+      GROUP BY p.ProductID, p.Name, p.Description, p.RetailPrice, p.StockQuantity, p.LowStockThreshold, p.imageURL
       ORDER BY ${orderBy}
     `, allParams)
 
@@ -1060,6 +1185,44 @@ router.put('/giftshop/products/:id/stock', async (req, res) => {
     res.json({ ok: true, stockQuantity: newQty })
   } catch (err) {
     console.error('giftshop stock update error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// PUT /api/giftshop/products/:id — full update of a product's details
+router.put('/giftshop/products/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10)
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'Invalid product ID.' })
+    const { name, description, retailPrice, stockQuantity, lowStockThreshold, imageURL } = req.body || {}
+    if (!name || name.toString().trim() === '') return res.status(400).json({ error: 'Name is required.' })
+    const price     = parseFloat(retailPrice)
+    const stock     = parseInt(stockQuantity ?? 0, 10)
+    const threshold = parseInt(lowStockThreshold ?? 5, 10)
+    if (!Number.isFinite(price) || price < 0) return res.status(400).json({ error: 'Invalid retail price.' })
+    const [result] = await db.execute(
+      `UPDATE Product SET Name=?, Description=?, RetailPrice=?, StockQuantity=?, LowStockThreshold=?, imageURL=? WHERE ProductID=?`,
+      [name.toString().trim(), description?.toString().trim() || null, price, stock, threshold, imageURL?.toString().trim() || null, id]
+    )
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Product not found.' })
+    const [rows] = await db.execute('SELECT * FROM Product WHERE ProductID = ?', [id])
+    res.json({ success: true, product: rows[0] })
+  } catch (err) {
+    console.error('giftshop update product error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// DELETE /api/giftshop/products/:id — remove a product
+router.delete('/giftshop/products/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10)
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'Invalid product ID.' })
+    const [result] = await db.execute('DELETE FROM Product WHERE ProductID = ?', [id])
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Product not found.' })
+    res.json({ success: true })
+  } catch (err) {
+    console.error('giftshop delete product error:', err)
     res.status(500).json({ error: String(err) })
   }
 })
@@ -1429,7 +1592,8 @@ router.get('/admin/membership-exhibit-report', async (req, res) => {
       SELECT
         mt.TypeID,
         mt.TypeName                               AS MembershipType,
-        mt.DiscountPercent,
+        mt.GiftShopDiscountPercent,
+        mt.TicketDiscountPercent,
         e.ExhibitID,
         e.ExhibitName,
         e.Status                                  AS ExhibitStatus,
@@ -1444,7 +1608,7 @@ router.get('/admin/membership-exhibit-report', async (req, res) => {
       JOIN Exhibit             e   ON e.ExhibitID         = tpi.ExhibitID
       WHERE tp.Status = 'Active'
         ${where}
-      GROUP BY mt.TypeID, mt.TypeName, mt.DiscountPercent, e.ExhibitID, e.ExhibitName, e.Status
+      GROUP BY mt.TypeID, mt.TypeName, mt.GiftShopDiscountPercent, mt.TicketDiscountPercent, e.ExhibitID, e.ExhibitName, e.Status
       ORDER BY ${orderBy}
     `, params)
 

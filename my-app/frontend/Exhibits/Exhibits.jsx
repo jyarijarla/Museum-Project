@@ -35,6 +35,7 @@ export default function Exhibits(){
           <div className="section-eyebrow" style={{color:'var(--accent-2)'}}>All Collections</div>
           <h1 className="hero-title">Our Exhibits</h1>
           <p className="hero-sub">Three permanent galleries spanning the cosmos, deep time, and the ancient world. Click any exhibit to explore artifacts from our live collection.</p>
+          <Link className="btn primary exhibits-hero-btn" to="/tickets">Ready to Experience It? Get Tickets →</Link>
         </div>
       </section>
 
@@ -88,10 +89,7 @@ export default function Exhibits(){
 
         </div>
 
-        <div className="exhibits-cta-strip">
-          <p>Ready to visit? Tickets start at $12 per exhibit.</p>
-          <Link className="btn primary" to="/tickets">Buy Tickets</Link>
-        </div>
+
       </main>
 
       <footer className="home-footer">© {new Date().getFullYear()} City Museum</footer>

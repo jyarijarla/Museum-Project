@@ -453,6 +453,30 @@
   border: 1px solid rgba(239,68,68,0.18);
 }
 
+/* ── Artifact action buttons ── */
+.curator-action-btns { display: flex; align-items: center; gap: 6px; }
+.curator-edit-btn {
+  padding: 4px 10px; border-radius: 7px;
+  border: 1.5px solid rgba(59,130,246,0.3); background: #eff6ff;
+  color: #1d4ed8; font-size: 11px; font-weight: 700; cursor: pointer;
+  line-height: 1; font-family: inherit; transition: background .12s, border-color .12s;
+  white-space: nowrap;
+}
+.curator-edit-btn:hover { background: #dbeafe; border-color: #3b82f6; }
+.curator-delete-btn {
+  padding: 4px 10px; border-radius: 7px;
+  border: 1.5px solid rgba(239,68,68,0.25); background: #fef2f2;
+  color: #b91c1c; font-size: 11px; font-weight: 700; cursor: pointer;
+  line-height: 1; font-family: inherit; transition: background .12s, border-color .12s;
+  white-space: nowrap;
+}
+.curator-delete-btn:hover { background: #fee2e2; border-color: #ef4444; }
+.btn.curator-btn-danger {
+  background: #ef4444; color: #fff; border: none;
+}
+.btn.curator-btn-danger:hover { background: #dc2626; }
+.btn.curator-btn-danger:disabled { opacity: 0.6; cursor: default; }
+
 /* ── Responsive ── */
 @media (max-width: 920px) {
   .curator-portal-main { padding: 20px 18px; }

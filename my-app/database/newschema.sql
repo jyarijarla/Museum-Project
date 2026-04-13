@@ -30,14 +30,21 @@ CREATE TABLE Visitor (
 CREATE TABLE MembershipType (
   TypeID INT NOT NULL AUTO_INCREMENT,
   TypeName VARCHAR(50) NOT NULL,
+  GiftShopDiscountPercent DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+  TicketDiscountPercent   DECIMAL(5,2) NOT NULL DEFAULT 0.00,
   PRIMARY KEY (TypeID),
-  UNIQUE KEY (TypeName)
+  UNIQUE KEY (TypeName),
+  CONSTRAINT MembershipTypeGiftShopDiscountCheck CHECK (GiftShopDiscountPercent BETWEEN 0 AND 100),
+  CONSTRAINT MembershipTypeTicketDiscountCheck   CHECK (TicketDiscountPercent   BETWEEN 0 AND 100)
 );
 
-INSERT INTO MembershipType (TypeID, TypeName) VALUES
-  (1, 'Basic'),
-  (2, 'Premium'),
-  (3, 'Patron');
+-- Basic: 5% gift shop, 10% ticket discount
+-- Premium: 10% gift shop, 50% ticket discount
+-- Patron: 20% gift shop, 100% ticket discount (free admission)
+INSERT INTO MembershipType (TypeID, TypeName, GiftShopDiscountPercent, TicketDiscountPercent) VALUES
+  (1, 'Basic',   5.00,  10.00),
+  (2, 'Premium', 10.00, 50.00),
+  (3, 'Patron',  20.00, 100.00);
 
 CREATE TABLE Membership (
   MembershipID INT NOT NULL AUTO_INCREMENT,

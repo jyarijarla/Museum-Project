@@ -96,17 +96,23 @@ export default function Membership(){
           ) : planTypes.length === 0 ? (
             <div style={{gridColumn:'1/-1',textAlign:'center',padding:'2rem',color:'#6b7280'}}>Unable to load membership plans.</div>
           ) : planTypes.map(pt => {
+            const giftDisc   = parseFloat(pt.GiftShopDiscountPercent || 0)
+            const ticketDisc = parseFloat(pt.TicketDiscountPercent   || 0)
+            const ticketBenefit = ticketDisc >= 100
+              ? 'Free admission to all exhibits'
+              : `${ticketDisc}% discount on exhibit tickets`
             const plan = {
               id: pt.TypeID,
               title: pt.TypeName,
               price: PLAN_PRICES[pt.TypeID] ?? 99,
               featured: pt.TypeID === FEATURED_ID,
-              discount: parseFloat(pt.DiscountPercent || 0),
+              giftDisc,
+              ticketDisc,
               benefits: [
-                pt.BenefitsDescription,
-                `${parseFloat(pt.DiscountPercent || 0)}% discount on gift shop purchases`,
-                'Free general admission to all exhibits',
+                ticketBenefit,
+                `${giftDisc}% discount on gift shop purchases`,
                 'Invitation to member-only events',
+                'Priority access to new exhibits',
               ]
             }
             const existing = cart.find(i=> i.type === 'membership')

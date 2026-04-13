@@ -41,6 +41,7 @@ export default function Tickets() {
   const [visitDate, setVisitDate] = useState(TODAY)
   const [exhibits, setExhibits] = useState([])
   const [isMember, setIsMember] = useState(false)
+  const [ticketDiscount, setTicketDiscount] = useState(0)
   const [quantities, setQuantities] = useState({})   // { exhibitId: qty }
   const [pricingLoading, setPricingLoading] = useState(false)
   const [pricingError, setPricingError] = useState(null)
@@ -66,6 +67,7 @@ export default function Tickets() {
       const data = await res.json()
       setExhibits(data.exhibits || [])
       setIsMember(!!data.isMember)
+      setTicketDiscount(data.ticketDiscountPercent || 0)
       // Reset quantities when date/pricing changes
       setQuantities({})
     } catch (e) {
@@ -131,7 +133,12 @@ export default function Tickets() {
             <div className="confirm-date-chip">
               📅 {new Date(confirmation.visitDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </div>
-            {confirmation.isMember && <div className="member-badge">⭐ Member pricing applied</div>}
+            {confirmation.isMember && (
+              <div className="member-badge">
+                ⭐ Member pricing applied
+                {confirmation.ticketDiscountPercent > 0 && ` (${confirmation.ticketDiscountPercent >= 100 ? 'free admission' : `${confirmation.ticketDiscountPercent}% off`})`}
+              </div>
+            )}
             <div className="confirm-items">
               {confirmation.items.map(it => {
                 const cfg = EXHIBIT_CONFIG[it.ExhibitID] || {}
@@ -179,8 +186,10 @@ export default function Tickets() {
             Select your visit date, choose your exhibits, and step into another world.
           </p>
           {isMember
-            ? <div className="member-badge hero-badge">⭐ Member — discounted prices applied automatically</div>
-            : <Link to="/membership" className="tkt-hero-cta">Become a member for up to 40% off →</Link>}
+            ? <div className="member-badge hero-badge">
+                ⭐ Member — {ticketDiscount >= 100 ? 'free admission' : `${ticketDiscount}% discount`} applied automatically
+              </div>
+            : <Link to="/membership" className="tkt-hero-cta">Become a member for up exclusive perks →</Link>}
         </div>
       </section>
 

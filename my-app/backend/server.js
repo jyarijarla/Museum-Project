@@ -8,23 +8,26 @@ dotenv.config();
 const app = express();
 
 // middleware
-// Use a configurable client origin for CORS when deployed. If `CLIENT_ORIGIN`
-// is not set, allow all origins (useful for local development).
-const clientOrigin = process.env.CLIENT_ORIGIN || null;
-if (clientOrigin) {
-  app.use(cors({
-    origin: (origin, cb) => {
-      // allow requests with no origin (e.g. curl, server-to-server)
-      if (!origin) return cb(null, true);
-      return cb(null, origin === clientOrigin);
-    },
-    credentials: true,
-    methods: ['GET','POST','PUT','DELETE','OPTIONS']
-  }));
-} else {
-  // permissive for dev
-  app.use(cors());
-}
+// CLIENT_ORIGIN can be a comma-separated list of allowed origins.
+// If not set, all origins are allowed (local dev).
+const allowedOrigins = process.env.CLIENT_ORIGIN
+  ? process.env.CLIENT_ORIGIN.split(',').map(o => o.trim())
+  : null;
+
+app.use(cors({
+  origin: (origin, cb) => {
+    // allow server-to-server / curl (no origin header)
+    if (!origin) return cb(null, true);
+    // if no whitelist configured, allow everything (dev)
+    if (!allowedOrigins) return cb(null, true);
+    // allow any vercel.app subdomain for preview deployments
+    if (origin.endsWith('.vercel.app')) return cb(null, true);
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+    return cb(new Error('CORS: origin not allowed'));
+  },
+  credentials: true,
+  methods: ['GET','POST','PUT','DELETE','OPTIONS']
+}));
 
 app.use(express.json());
 

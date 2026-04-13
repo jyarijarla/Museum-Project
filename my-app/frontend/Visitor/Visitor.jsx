@@ -68,7 +68,8 @@ export default function Visitor(){
             // flatten items into history items with date and total price
             const flat = []
             for(const tr of trs){
-              const date = tr.Date ? new Date(tr.Date) : null
+              // Parse as local noon to avoid UTC-midnight shifting date back 1 day in US timezones
+              const date = tr.Date ? new Date(String(tr.Date).slice(0,10) + 'T12:00:00') : null
               for(const it of (tr.items||[])){
                 flat.push({ TransactionID: tr.TransactionID, Date: date, ProductID: it.ProductID, Name: it.Name, Quantity: it.Quantity, Price: Number(it.Price || it.RetailPrice || 0) })
               }
@@ -272,12 +273,12 @@ export default function Visitor(){
                         <div className="dash-history-info">
                           <span className="dash-history-name">
                             Visit: {tp.VisitDate 
-                              ? new Date(tp.VisitDate).toLocaleDateString() 
+                              ? new Date(String(tp.VisitDate).slice(0,10) + 'T12:00:00').toLocaleDateString() 
                               : '—'}
                           </span>
                           <span className="dash-history-meta">
                             Purchased: {tp.PurchaseDate 
-                              ? new Date(tp.PurchaseDate).toLocaleDateString() 
+                              ? new Date(String(tp.PurchaseDate).slice(0,10) + 'T12:00:00').toLocaleDateString() 
                               : '—'} ·{' '}
                             {tp.items.map(it => 
                               `${it.ExhibitName} x${it.Quantity}`
@@ -298,7 +299,7 @@ export default function Visitor(){
                           <span className="dash-history-price">
                             ${Number(tp.TotalAmount || 0).toFixed(2)}
                           </span>
-                          {tp.PurchaseStatus === 'Active' && tp.VisitDate && new Date(tp.VisitDate) > new Date(new Date().toDateString()) && (
+                          {tp.PurchaseStatus === 'Active' && tp.VisitDate && new Date(String(tp.VisitDate).slice(0,10) + 'T12:00:00') > new Date(new Date().toDateString()) && (
                             <button
                               className="dqa-btn dqa-danger"
                               style={{ fontSize: 11, padding: '3px 10px' }}

@@ -1,0 +1,6 @@
+{
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
+  "buildCommand": "cd my-app && npm install && npm run build",
+  "outputDirectory": "my-app/dist",
+  "framework": "vite"
+}

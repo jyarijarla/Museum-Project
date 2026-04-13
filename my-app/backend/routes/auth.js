@@ -4,6 +4,25 @@ import bcrypt from "bcryptjs";
 
 const router = express.Router();
 
+// Detect TransactionRecord schema once and cache — AWS uses TotalAmount, local uses Revenue
+let _txRevenueCol = null
+async function txRevenueCol() {
+  if (_txRevenueCol) return _txRevenueCol
+  try {
+    const [cols] = await db.execute(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE()
+         AND TABLE_NAME = 'TransactionRecord'
+         AND COLUMN_NAME = 'Revenue'`
+    )
+    _txRevenueCol = cols.length > 0 ? 'Revenue' : 'TotalAmount'
+  } catch (_) {
+    _txRevenueCol = 'TotalAmount'
+  }
+  console.log('[schema] TransactionRecord revenue column:', _txRevenueCol)
+  return _txRevenueCol
+}
+
 // Health check - quick DB connectivity test
 router.get('/health', async (req, res) => {
   try {
@@ -382,27 +401,20 @@ router.post('/transaction/create', async (req, res) => {
       preparedItems.push({ productId: pid, qty, price, retailPrice, giftShopDiscountPercent })
     }
 
-    // insert transaction record — handle both schema variants:
-    //   old schema: (DepartmentID, VisitorID, Date, Revenue)
-    //   newschema.sql: (VisitorID, Date, TotalAmount)
+    // insert transaction record — schema detected once via INFORMATION_SCHEMA
+    const revCol = await txRevenueCol()
     let transactionId = null
     let tres
-    try {
+    if (revCol === 'Revenue') {
       ;[tres] = await db.execute(
         'INSERT INTO TransactionRecord (DepartmentID, VisitorID, Date, Revenue) VALUES (?, ?, CURDATE(), ?)',
         [deptId, vId, revenue]
       )
-    } catch (schemaErr) {
-      const msg = String(schemaErr).toLowerCase()
-      if (msg.includes('revenue') || msg.includes('departmentid')) {
-        // AWS RDS uses newschema.sql — no DepartmentID, column is TotalAmount
-        ;[tres] = await db.execute(
-          'INSERT INTO TransactionRecord (VisitorID, Date, TotalAmount) VALUES (?, CURDATE(), ?)',
-          [vId, revenue]
-        )
-      } else {
-        throw schemaErr
-      }
+    } else {
+      ;[tres] = await db.execute(
+        'INSERT INTO TransactionRecord (VisitorID, Date, TotalAmount) VALUES (?, CURDATE(), ?)',
+        [vId, revenue]
+      )
     }
     transactionId = tres && tres.insertId ? tres.insertId : null
 
@@ -437,31 +449,17 @@ router.get('/visitor/:id/transactions', async (req, res) => {
     if (!vrows || vrows.length === 0) return res.status(404).json({ error: 'Visitor not found' })
     const visitorId = vrows[0].VisitorID
 
-    // join products — handle both schema variants (Revenue vs TotalAmount)
-    let rows
-    try {
-      ;[rows] = await db.execute(
-        `SELECT tr.TransactionID, tr.Date, tr.Revenue, tp.ProductID, tp.Quantity, p.Name, p.RetailPrice
-         FROM TransactionRecord tr
-         JOIN TransactionProduct tp ON tp.TransactionID = tr.TransactionID
-         LEFT JOIN Product p ON p.ProductID = tp.ProductID
-         WHERE tr.VisitorID = ?
-         ORDER BY tr.Date DESC`,
-        [visitorId])
-    } catch (schemaErr) {
-      if (String(schemaErr).toLowerCase().includes('revenue')) {
-        ;[rows] = await db.execute(
-          `SELECT tr.TransactionID, tr.Date, tr.TotalAmount AS Revenue, tp.ProductID, tp.Quantity, p.Name, p.RetailPrice
-           FROM TransactionRecord tr
-           JOIN TransactionProduct tp ON tp.TransactionID = tr.TransactionID
-           LEFT JOIN Product p ON p.ProductID = tp.ProductID
-           WHERE tr.VisitorID = ?
-           ORDER BY tr.Date DESC`,
-          [visitorId])
-      } else {
-        throw schemaErr
-      }
-    }
+    // join products — use correct column detected via INFORMATION_SCHEMA
+    const revCol = await txRevenueCol()
+    const revenueExpr = revCol === 'Revenue' ? 'tr.Revenue' : 'tr.TotalAmount'
+    const [rows] = await db.execute(
+      `SELECT tr.TransactionID, tr.Date, ${revenueExpr} AS Revenue, tp.ProductID, tp.Quantity, p.Name, p.RetailPrice
+       FROM TransactionRecord tr
+       JOIN TransactionProduct tp ON tp.TransactionID = tr.TransactionID
+       LEFT JOIN Product p ON p.ProductID = tp.ProductID
+       WHERE tr.VisitorID = ?
+       ORDER BY tr.Date DESC`,
+      [visitorId])
 
     // Group by TransactionID
     const map = {}

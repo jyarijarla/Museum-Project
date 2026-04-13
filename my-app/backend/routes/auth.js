@@ -100,11 +100,17 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ error: 'Missing username/email' });
     }
 
-    // lookup by username and include Visitor info when available
+    // lookup by username and include Visitor OR Staff info when available
     const [rows] = await db.execute(
-      `SELECT ua.*, v.FirstName, v.LastName, v.Email as VisitorEmail
+      `SELECT ua.*,
+              COALESCE(v.FirstName, s.FirstName) AS FirstName,
+              COALESCE(v.LastName,  s.LastName)  AS LastName,
+              COALESCE(v.Email,     s.Email)     AS VisitorEmail,
+              s.PhoneNumber AS StaffPhone,
+              s.HireDate    AS StaffHireDate
        FROM UserAccount ua
        LEFT JOIN Visitor v ON v.UserID = ua.UserID
+       LEFT JOIN Staff s   ON s.UserID = ua.UserID
        WHERE ua.Username = ?`,
       [identifier]
     );
@@ -130,7 +136,9 @@ router.post("/login", async (req, res) => {
       role: user.Role,
       firstName: user.FirstName || null,
       lastName: user.LastName || null,
-      email: user.VisitorEmail || null
+      email: user.VisitorEmail || null,
+      phone: user.StaffPhone || null,
+      hireDate: user.StaffHireDate || null
     });
 
   } catch (err) {
@@ -347,13 +355,6 @@ router.post('/transaction/create', async (req, res) => {
       }
     } catch (_) { /* non-fatal */ }
 
-    // determine department id for gift shop if possible
-    let deptId = 1
-    try {
-      const [drows] = await db.execute("SELECT DepartmentID FROM Department WHERE Name LIKE '%Gift%' LIMIT 1")
-      if (drows && drows.length > 0) deptId = drows[0].DepartmentID
-    } catch (e) { /* ignore */ }
-
     // compute revenue: look up RetailPrice, apply member gift shop discount if applicable
     let revenue = 0
     const preparedItems = []
@@ -370,21 +371,13 @@ router.post('/transaction/create', async (req, res) => {
       preparedItems.push({ productId: pid, qty, price, retailPrice, giftShopDiscountPercent })
     }
 
-    // insert transaction record — include VisitorID when available in schema
+    // insert transaction record
     let transactionId = null
-    try {
-      // try insert with VisitorID column
-      const [tres] = await db.execute('INSERT INTO TransactionRecord (DepartmentID, VisitorID, Date, Revenue) VALUES (?, ?, CURDATE(), ?)', [deptId, vId, revenue])
-      transactionId = tres && tres.insertId ? tres.insertId : null
-    } catch (tErr) {
-      // if VisitorID column missing, try without it
-      if (tErr && (tErr.code === 'ER_BAD_FIELD_ERROR' || tErr.code === 'ER_UNKNOWN_COLUMN')) {
-        const [tres2] = await db.execute('INSERT INTO TransactionRecord (DepartmentID, Date, Revenue) VALUES (?, CURDATE(), ?)', [deptId, revenue])
-        transactionId = tres2 && tres2.insertId ? tres2.insertId : null
-      } else {
-        throw tErr
-      }
-    }
+    const [tres] = await db.execute(
+      'INSERT INTO TransactionRecord (VisitorID, Date, TotalAmount) VALUES (?, CURDATE(), ?)',
+      [vId, revenue]
+    )
+    transactionId = tres && tres.insertId ? tres.insertId : null
 
     // insert transaction products
     for (const it of preparedItems) {
@@ -419,7 +412,7 @@ router.get('/visitor/:id/transactions', async (req, res) => {
 
     // join products for this visitor's transactions only
     const [rows] = await db.execute(
-      `SELECT tr.TransactionID, tr.Date, tr.Revenue, tp.ProductID, tp.Quantity, p.Name, p.RetailPrice
+      `SELECT tr.TransactionID, tr.Date, tr.TotalAmount AS Revenue, tp.ProductID, tp.Quantity, p.Name, p.RetailPrice
        FROM TransactionRecord tr
        JOIN TransactionProduct tp ON tp.TransactionID = tr.TransactionID
        LEFT JOIN Product p ON p.ProductID = tp.ProductID
@@ -1644,14 +1637,11 @@ router.get('/visitor/:id/ticket-purchases', async (req, res) => {
         tpi.TicketPurchaseItemID,
         tpi.Quantity,
         tpi.UnitPrice,
-        tpi.Subtotal,
-        e.ExhibitName,
-        t.VisitTime,
-        t.Status AS TicketStatus
+        (tpi.Quantity * tpi.UnitPrice) AS Subtotal,
+        e.ExhibitName
       FROM TicketPurchase tp
       JOIN TicketPurchaseItem tpi ON tp.TicketPurchaseID = tpi.TicketPurchaseID
       JOIN Exhibit e ON tpi.ExhibitID = e.ExhibitID
-      LEFT JOIN Ticket t ON tp.TicketPurchaseID = t.TicketPurchaseID
       WHERE tp.VisitorID = ?
       ORDER BY tp.PurchaseDate DESC`,
       [visitorId]
@@ -1667,8 +1657,6 @@ router.get('/visitor/:id/ticket-purchases', async (req, res) => {
           VisitDate: r.VisitDate,
           TotalAmount: r.TotalAmount,
           PurchaseStatus: r.PurchaseStatus,
-          VisitTime: r.VisitTime,
-          TicketStatus: r.TicketStatus,
           items: []
         }
       }
@@ -1696,11 +1684,6 @@ router.post('/visitor/ticket-purchases/cancel', async (req, res) => {
     // Update TicketPurchase status
     await db.execute(
       'UPDATE TicketPurchase SET Status = ? WHERE TicketPurchaseID = ?',
-      ['Cancelled', ticketPurchaseId]
-    )
-    // Update linked Ticket status
-    await db.execute(
-      'UPDATE Ticket SET Status = ? WHERE TicketPurchaseID = ?',
       ['Cancelled', ticketPurchaseId]
     )
     res.json({ success: true, message: 'Ticket purchase cancelled successfully' })

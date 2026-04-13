@@ -8,6 +8,12 @@ import { API_BASE } from '../../src/api.js'
 export default function Visitor(){
   const navigate = useNavigate()
   const { user, logout } = useAuth()
+  const role = user?.role || user?.Role || 'Visitor'
+  const isStaff = ['Admin', 'Curator', 'Gift_Shop_Manager'].includes(role)
+  const profileTitle = role === 'Admin' ? 'Admin Profile'
+    : role === 'Curator' ? 'Curator Profile'
+    : role === 'Gift_Shop_Manager' ? 'Staff Profile'
+    : 'Visitor Profile'
   const [visitor, setVisitor] = useState(null)
   const [membership, setMembership] = useState(null)
   const [transactions, setTransactions] = useState([])
@@ -175,9 +181,18 @@ export default function Visitor(){
               <div className="dash-card">
                 <div className="dash-card-header">
                   <div className="dash-card-icon-wrap">👤</div>
-                  <h2 className="dash-card-title">Visitor Profile</h2>
+                  <h2 className="dash-card-title">{profileTitle}</h2>
                 </div>
-                {visitor ? (
+                {isStaff ? (
+                  <dl className="dash-dl">
+                    <div className="dash-dl-row"><dt>Name</dt><dd>{user?.firstName || user?.FirstName || '—'} {user?.lastName || user?.LastName || ''}</dd></div>
+                    <div className="dash-dl-row"><dt>Username</dt><dd>{user?.username || user?.Username || '—'}</dd></div>
+                    <div className="dash-dl-row"><dt>Email</dt><dd>{user?.email || user?.Email || '—'}</dd></div>
+                    <div className="dash-dl-row"><dt>Role</dt><dd>{role.replace('_', ' ')}</dd></div>
+                    {user?.phone && <div className="dash-dl-row"><dt>Phone</dt><dd>{user.phone}</dd></div>}
+                    {user?.hireDate && <div className="dash-dl-row"><dt>Hire Date</dt><dd>{new Date(user.hireDate).toLocaleDateString()}</dd></div>}
+                  </dl>
+                ) : visitor ? (
                   <dl className="dash-dl">
                     <div className="dash-dl-row"><dt>Name</dt><dd>{visitor.FirstName} {visitor.LastName}</dd></div>
                     <div className="dash-dl-row"><dt>Phone</dt><dd>{visitor.PhoneNumber || '—'}</dd></div>
@@ -190,8 +205,8 @@ export default function Visitor(){
                 )}
               </div>
 
-              {/* Membership card */}
-              <div className="dash-card">
+              {/* Membership card — visitors only */}
+              {!isStaff && <div className="dash-card">
                 <div className="dash-card-header">
                   <div className="dash-card-icon-wrap">💳</div>
                   <h2 className="dash-card-title">Membership</h2>
@@ -242,9 +257,10 @@ export default function Visitor(){
                 ) : (
                   <p className="dash-empty-note">No active membership. <Link to="/membership">View plans →</Link></p>
                 )}
-              </div>
-              {/* Ticket Purchase History card */}
-              <div className="dash-card">
+              </div>}
+
+              {/* Ticket Purchase History card — visitors only */}
+              {!isStaff && <div className="dash-card">
                 <div className="dash-card-header">
                   <div className="dash-card-icon-wrap">🎟️</div>
                   <h2 className="dash-card-title">Ticket Purchase History</h2>
@@ -301,9 +317,9 @@ export default function Visitor(){
                     </p>
                   )}
                 </div>
-              </div>
-              {/* Purchase history card */}
-              <div className="dash-card">
+              </div>}
+              {/* Purchase history card — visitors only */}
+              {!isStaff && <div className="dash-card">
                 <div className="dash-card-header">
                   <div className="dash-card-icon-wrap">🛍️</div>
                   <h2 className="dash-card-title">Purchase History</h2>
@@ -344,7 +360,7 @@ export default function Visitor(){
                   }
                   {historyItems.length === 0 && <p className="dash-empty-note">No purchases yet. <Link to="/giftshop">Visit the gift shop →</Link></p>}
                 </div>
-              </div>
+              </div>}
             </div>
 
             {/* ── Right sidebar ── */}

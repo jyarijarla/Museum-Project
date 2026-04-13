@@ -382,12 +382,28 @@ router.post('/transaction/create', async (req, res) => {
       preparedItems.push({ productId: pid, qty, price, retailPrice, giftShopDiscountPercent })
     }
 
-    // insert transaction record
+    // insert transaction record — handle both schema variants:
+    //   old schema: (DepartmentID, VisitorID, Date, Revenue)
+    //   newschema.sql: (VisitorID, Date, TotalAmount)
     let transactionId = null
-    const [tres] = await db.execute(
-      'INSERT INTO TransactionRecord (DepartmentID, VisitorID, Date, Revenue) VALUES (?, ?, CURDATE(), ?)',
-      [deptId, vId, revenue]
-    )
+    let tres
+    try {
+      ;[tres] = await db.execute(
+        'INSERT INTO TransactionRecord (DepartmentID, VisitorID, Date, Revenue) VALUES (?, ?, CURDATE(), ?)',
+        [deptId, vId, revenue]
+      )
+    } catch (schemaErr) {
+      const msg = String(schemaErr).toLowerCase()
+      if (msg.includes('revenue') || msg.includes('departmentid')) {
+        // AWS RDS uses newschema.sql — no DepartmentID, column is TotalAmount
+        ;[tres] = await db.execute(
+          'INSERT INTO TransactionRecord (VisitorID, Date, TotalAmount) VALUES (?, CURDATE(), ?)',
+          [vId, revenue]
+        )
+      } else {
+        throw schemaErr
+      }
+    }
     transactionId = tres && tres.insertId ? tres.insertId : null
 
     // insert transaction products
@@ -421,15 +437,31 @@ router.get('/visitor/:id/transactions', async (req, res) => {
     if (!vrows || vrows.length === 0) return res.status(404).json({ error: 'Visitor not found' })
     const visitorId = vrows[0].VisitorID
 
-    // join products for this visitor's transactions only
-    const [rows] = await db.execute(
-      `SELECT tr.TransactionID, tr.Date, tr.Revenue, tp.ProductID, tp.Quantity, p.Name, p.RetailPrice
-       FROM TransactionRecord tr
-       JOIN TransactionProduct tp ON tp.TransactionID = tr.TransactionID
-       LEFT JOIN Product p ON p.ProductID = tp.ProductID
-       WHERE tr.VisitorID = ?
-       ORDER BY tr.Date DESC`,
-      [visitorId])
+    // join products — handle both schema variants (Revenue vs TotalAmount)
+    let rows
+    try {
+      ;[rows] = await db.execute(
+        `SELECT tr.TransactionID, tr.Date, tr.Revenue, tp.ProductID, tp.Quantity, p.Name, p.RetailPrice
+         FROM TransactionRecord tr
+         JOIN TransactionProduct tp ON tp.TransactionID = tr.TransactionID
+         LEFT JOIN Product p ON p.ProductID = tp.ProductID
+         WHERE tr.VisitorID = ?
+         ORDER BY tr.Date DESC`,
+        [visitorId])
+    } catch (schemaErr) {
+      if (String(schemaErr).toLowerCase().includes('revenue')) {
+        ;[rows] = await db.execute(
+          `SELECT tr.TransactionID, tr.Date, tr.TotalAmount AS Revenue, tp.ProductID, tp.Quantity, p.Name, p.RetailPrice
+           FROM TransactionRecord tr
+           JOIN TransactionProduct tp ON tp.TransactionID = tr.TransactionID
+           LEFT JOIN Product p ON p.ProductID = tp.ProductID
+           WHERE tr.VisitorID = ?
+           ORDER BY tr.Date DESC`,
+          [visitorId])
+      } else {
+        throw schemaErr
+      }
+    }
 
     // Group by TransactionID
     const map = {}

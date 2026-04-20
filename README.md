@@ -11,10 +11,10 @@ Deployed on Vercel: https://museum-project-ntb8d4h35-joseph-yarijarlas-projects.
 | Layer     | Technology                        |
 |-----------|-----------------------------------|
 | Frontend  | React 19, React Router 6, Vite 7 |
-| Backend   | Node.js, Express-style router     |
+| Backend   | Node.js                           |
 | Database  | MySQL 8.0                         |
 | Auth      | bcryptjs (hashed passwords)       |
-| Hosting   | Vercel (frontend + serverless)    |
+| Hosting   | Vercel (frontend + serverless) Render (backend) AWS (database)    |
 
 ## Features
 

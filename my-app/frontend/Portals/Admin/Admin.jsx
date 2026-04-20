@@ -357,6 +357,7 @@ export default function Admin() {
         <nav>
           <Link className="nav-link" to="/">Home</Link>
           <Link className="nav-link" to="/exhibits">Exhibits</Link>
+          <Link className="nav-link" to="/tickets">Tickets</Link>
           <Link className="nav-link" to="/membership">Membership</Link>
           <Link className="nav-link" to="/giftshop">Gift Shop</Link>
           <div style={{marginLeft:12}}><ProfileMenu /></div>

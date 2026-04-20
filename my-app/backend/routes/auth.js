@@ -2624,21 +2624,31 @@ router.post('/visitor/ticket-purchases/reschedule', async (req, res) => {
       conn.release()
     }
 
-    // Rescheduling resolves the off-date conflict for this purchase.
-    // Mark any unread ticket reschedule notifications for this visitor as read.
+    // Only mark the reschedule notification as read if NO remaining cancelled
+    // ticket purchases exist for this visitor on the original off-date.
     const [[visitorRow]] = await db.execute(
       'SELECT UserID FROM Visitor WHERE VisitorID = ? LIMIT 1',
       [purchase.VisitorID]
     )
     if (visitorRow?.UserID) {
-      await db.execute(
-        `UPDATE Notification
-         SET IsRead = 1
-         WHERE UserID = ?
-           AND Title = 'Ticket Reschedule Required'
-           AND CAST(IsRead AS UNSIGNED) = 0`,
-        [visitorRow.UserID]
+      const [[remaining]] = await db.execute(
+        `SELECT COUNT(*) AS cnt
+         FROM TicketPurchase tp
+         WHERE tp.VisitorID = ?
+           AND tp.VisitDate = ?
+           AND LOWER(COALESCE(tp.Status, 'active')) IN ('cancelled', 'canceled')`,
+        [purchase.VisitorID, oldDate]
       )
+      if (Number(remaining?.cnt || 0) === 0) {
+        await db.execute(
+          `UPDATE Notification
+           SET IsRead = 1
+           WHERE UserID = ?
+             AND Title = 'Ticket Reschedule Required'
+             AND CAST(IsRead AS UNSIGNED) = 0`,
+          [visitorRow.UserID]
+        )
+      }
     }
 
     res.json({ success: true, ticketPurchaseId, oldVisitDate: oldDate, newVisitDate })

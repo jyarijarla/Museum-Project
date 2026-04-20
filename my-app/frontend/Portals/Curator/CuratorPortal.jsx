@@ -290,7 +290,9 @@ export default function CuratorPortal() {
       <header className="home-header">
         <div className="brand"><Link to="/" className="brand-link">City Museum</Link></div>
         <nav>
+          <Link className="nav-link" to="/">Home</Link>
           <Link className="nav-link" to="/exhibits">Exhibits</Link>
+          <Link className="nav-link" to="/tickets">Tickets</Link>
           <Link className="nav-link" to="/exhibits/space">Space</Link>
           <Link className="nav-link" to="/exhibits/natural">Natural</Link>
           <Link className="nav-link" to="/exhibits/ancient">Ancient</Link>

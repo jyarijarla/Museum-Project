@@ -55,7 +55,7 @@ export default function Exhibits(){
       <main className="exhibits-main">
         <div className="exhibit-cards">
 
-          {exhibits.filter(e => e.Status !== 'Cancelled').map(ex => {
+          {exhibits.map(ex => {
             const hc = HARDCODED[ex.ExhibitID]
             if (hc) {
               // Render the hardcoded card for original 3 exhibits

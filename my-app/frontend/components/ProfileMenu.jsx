@@ -37,9 +37,11 @@ export default function ProfileMenu(){
 
   useEffect(() => {
     window.addEventListener('membership-cancelled', fetchNotifications)
+    window.addEventListener('membership-renewed', fetchNotifications)
     window.addEventListener('ticket-rescheduled', fetchNotifications)
     return () => {
       window.removeEventListener('membership-cancelled', fetchNotifications)
+      window.removeEventListener('membership-renewed', fetchNotifications)
       window.removeEventListener('ticket-rescheduled', fetchNotifications)
     }
   }, [user])

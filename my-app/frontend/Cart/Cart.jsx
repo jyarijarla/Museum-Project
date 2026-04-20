@@ -202,6 +202,7 @@ export default function Cart(){
                               renewalFailed = true
                             } else {
                               removeItem(r.id, r.type)
+                              window.dispatchEvent(new Event('membership-renewed'))
                             }
                           }
                           if(renewalFailed){ setLoading(false); return }

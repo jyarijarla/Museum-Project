@@ -527,6 +527,18 @@ router.post('/membership/purchase', async (req, res) => {
       [resolvedVisitorId]
     )
     const membership = fetched && fetched.length > 0 ? fetched[0] : null
+
+    // Mark any unread "Membership Expiring Soon" notification as read for this visitor
+    try {
+      const [vRow] = await db.execute('SELECT UserID FROM Visitor WHERE VisitorID = ? LIMIT 1', [resolvedVisitorId])
+      if (vRow && vRow.length > 0 && vRow[0].UserID) {
+        await db.execute(
+          `UPDATE Notification SET IsRead = 1 WHERE UserID = ? AND Title = 'Membership Expiring Soon' AND CAST(IsRead AS UNSIGNED) = 0`,
+          [vRow[0].UserID]
+        )
+      }
+    } catch (nErr) { /* notification cleanup is best-effort */ }
+
     return res.json({ success: true, membershipId: membership?.MembershipID ?? null, visitorId: resolvedVisitorId, membership })
   } catch (err) {
     console.error('Membership purchase failed:', err && err.stack ? err.stack : err)
@@ -1090,6 +1102,18 @@ router.post('/membership/renew', async (req, res) => {
       `SELECT m.*, mt.TypeName FROM Membership m LEFT JOIN MembershipType mt ON mt.TypeID = m.MembershipTypeID WHERE m.MembershipID = ?`,
       [MembershipID]
     )
+
+    // Mark any unread "Membership Expiring Soon" notification as read for this visitor
+    try {
+      const [vRow] = await db.execute('SELECT UserID FROM Visitor WHERE VisitorID = ? LIMIT 1', [resolvedVisitorId])
+      if (vRow && vRow.length > 0 && vRow[0].UserID) {
+        await db.execute(
+          `UPDATE Notification SET IsRead = 1 WHERE UserID = ? AND Title = 'Membership Expiring Soon' AND CAST(IsRead AS UNSIGNED) = 0`,
+          [vRow[0].UserID]
+        )
+      }
+    } catch (nErr) { /* notification cleanup is best-effort */ }
+
     return res.json({ success: true, membership: updated[0] || null })
   } catch (err) {
     console.error('Renew membership error:', err)

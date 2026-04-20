@@ -76,7 +76,14 @@ export default function Cart(){
                       <div className="num">{item.qty}</div>
                       <button onClick={()=> updateQty(item.id,item.type, (item.qty||1)+1)}>+</button>
                     </div>
-                    <div className="price">${(Number(item.price)||0).toFixed(2)}</div>
+                      <div className="price">
+                        {item.originalPrice && (
+                          <span style={{textDecoration:'line-through',opacity:.45,fontSize:'.85em',marginRight:4}}>
+                            ${Number(item.originalPrice).toFixed(2)}
+                          </span>
+                        )}
+                        ${(Number(item.price)||0).toFixed(2)}
+                      </div>
                     <button className="remove" onClick={()=> removeItem(item.id,item.type)}>Remove</button>
                   </div>
                 </div>
@@ -129,6 +136,7 @@ export default function Cart(){
                           }
 
                           const memberships = cart.filter(i=> i.type === 'membership')
+                          const renewals = cart.filter(i=> i.type === 'membership-renewal')
                           let visitorId = null
                           let membershipFailed = false
 
@@ -178,6 +186,25 @@ export default function Cart(){
                             }
                             if(membershipFailed){ setLoading(false); return }
                           }
+
+                          // Process renewal items
+                          let renewalFailed = false
+                          for(const r of renewals){
+                            const p = await fetch(`${apiBase}/api/membership/renew`, {
+                              method: 'POST',
+                              headers: { 'Content-Type':'application/json' },
+                              body: JSON.stringify({ userId: uid })
+                            })
+                            const pj = await p.json().catch(()=>null)
+                            if(!p.ok){
+                              console.error('renewal failed', pj)
+                              alert('Failed to renew membership: ' + (pj?.error || p.statusText))
+                              renewalFailed = true
+                            } else {
+                              removeItem(r.id, r.type)
+                            }
+                          }
+                          if(renewalFailed){ setLoading(false); return }
 
                           // Process non-membership product items via the transactions API
                           const products = cart.filter(i=> i.type === 'product')

@@ -117,6 +117,7 @@ export default function Membership(){
               ]
             }
             const existing = cart.find(i=> i.type === 'membership')
+            const existingRenewal = cart.find(i=> i.type === 'membership-renewal' && i.id === plan.id)
             const isActiveMembership = currentMembership && currentMembership.computedStatus === 'Active'
             const isCurrent = (isActiveMembership && Number(currentPlanId) === Number(plan.id)) || (!!existing && existing.id === plan.id && !currentMembership)
             // Blocked: an active membership for a DIFFERENT plan exists (must cancel first)
@@ -168,6 +169,15 @@ export default function Membership(){
               showToast(`${plan.title} added to cart`)
             }
 
+            const onRenew = () => {
+              if(!user){ navigate('/login'); return }
+              const renewalPrice = Math.round(plan.price * 0.8 * 100) / 100
+              if(existingRenewal) removeItem(plan.id, 'membership-renewal')
+              if(existing && existing.id === plan.id) removeItem(plan.id, 'membership')
+              addItem({ id: plan.id, type: 'membership-renewal', title: `${plan.title} — Renewal`, price: renewalPrice, originalPrice: plan.price, desc: '20% renewal discount applied', qty: 1 })
+              navigate('/cart')
+            }
+
             return (
               <article key={plan.id} className={`membership-card ${plan.featured? 'featured':''} ${isCurrent? 'current':''}`}>
                 <div className="card-top">
@@ -180,10 +190,21 @@ export default function Membership(){
                 {isCurrent && currentMembership && (
                   <div className="membership-meta">
                     <span>Active since {new Date(currentMembership.StartDate).toLocaleDateString()}</span>
-                    <span>Renews {new Date(currentMembership.ExpirationDate).toLocaleDateString()}</span>
+                    <span>Expires {new Date(currentMembership.ExpirationDate).toLocaleDateString()}</span>
+                    {existingRenewal && (
+                      <span className="renew-projected">Renews to {new Date(new Date(currentMembership.ExpirationDate).setFullYear(new Date(currentMembership.ExpirationDate).getFullYear() + 1)).toLocaleDateString()} after checkout</span>
+                    )}
                   </div>
                 )}
-                <div className="card-actions">
+                <div className={`card-actions ${isCurrent && isActiveMembership ? 'card-actions-row' : ''}`}>
+                  {isCurrent && isActiveMembership && (
+                    <button
+                      className={`btn renew ${existingRenewal ? 'in-cart' : ''}`}
+                      onClick={onRenew}
+                    >
+                      {existingRenewal ? '✓ In Cart' : 'Renew — 20% Off'}
+                    </button>
+                  )}
                   <button
                     className={`btn ${isCurrent? 'ghost': isDisabled? 'btn-disabled':'primary'}`}
                     onClick={onChoose}

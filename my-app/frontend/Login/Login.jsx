@@ -7,6 +7,10 @@ import { API_BASE } from '../../src/api.js'
 
 export default function Login() {
   const [showCreate, setShowCreate] = useState(false);
+  const [showReset, setShowReset] = useState(false);
+  const [resetStep, setResetStep] = useState(1); // 1=form, 2=success
+  const [resetError, setResetError] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
   const navigate = useNavigate();
   const [error, setError] = useState('')
   const { login } = useAuth()
@@ -91,7 +95,7 @@ export default function Login() {
 
           <div className="row between">
             <div />
-            <a className="forgot" href="#">Forgot?</a>
+            <a className="forgot" href="#" onClick={(e) => { e.preventDefault(); setShowReset(true); setResetStep(1); setResetError(''); }}>Forgot?</a>
           </div>
 
           <button className="btn primary" type="submit">Sign in</button>
@@ -118,6 +122,75 @@ export default function Login() {
             }
           }}
         />
+      )}
+
+      {showReset && (
+        <div className="modal-backdrop" onClick={() => setShowReset(false)}>
+          <div className="reset-modal" onClick={e => e.stopPropagation()}>
+            <div className="reset-modal-header">
+              <h3>{resetStep === 1 ? 'Reset Password' : 'Password Reset!'}</h3>
+              <button className="modal-close" onClick={() => setShowReset(false)}>&times;</button>
+            </div>
+
+            {resetStep === 1 ? (
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                setResetError('');
+                setResetLoading(true);
+                const form = e.target;
+                try {
+                  const res = await fetch(`${API_BASE()}/api/reset-password`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      username: form.resetUsername.value,
+                      email: form.resetEmail.value,
+                      newPassword: form.resetNewPassword.value,
+                    }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) {
+                    setResetError(data.error || 'Reset failed');
+                  } else {
+                    setResetStep(2);
+                  }
+                } catch {
+                  setResetError('Server error');
+                } finally {
+                  setResetLoading(false);
+                }
+              }}>
+                <p className="reset-sub">Enter your username and the email on file to set a new password.</p>
+
+                <label className="field">
+                  <span className="field-label">Username</span>
+                  <input name="resetUsername" required placeholder="your-username" />
+                </label>
+
+                <label className="field">
+                  <span className="field-label">Email on file</span>
+                  <input name="resetEmail" type="email" required placeholder="you@example.com" />
+                </label>
+
+                <label className="field">
+                  <span className="field-label">New Password</span>
+                  <input name="resetNewPassword" type="password" required minLength={6} placeholder="Min 6 characters" />
+                </label>
+
+                {resetError && <div className="login-error">{resetError}</div>}
+
+                <button className="btn primary" type="submit" disabled={resetLoading}>
+                  {resetLoading ? 'Resetting…' : 'Reset Password'}
+                </button>
+              </form>
+            ) : (
+              <div className="reset-success">
+                <p>Your password has been updated. You can now sign in with your new password.</p>
+                <button className="btn primary" onClick={() => setShowReset(false)}>Back to Sign In</button>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

@@ -39,6 +39,91 @@ export default function CuratorPortal() {
   const [deleteSaving,  setDeleteSaving]  = useState(false)
   const [deleteError,   setDeleteError]   = useState('')
 
+  // ── Artifact filters / pagination ──
+  const [artSearch, setArtSearch] = useState('')
+  const [artExhibitFilter, setArtExhibitFilter] = useState('')
+  const [artDateFrom, setArtDateFrom] = useState('')
+  const [artDateTo, setArtDateTo] = useState('')
+  const [artPage, setArtPage] = useState(1)
+  const ART_PER_PAGE = 10
+
+  // ── Cancel Exhibit ──
+  const [cancelExhibitTarget, setCancelExhibitTarget] = useState(null) // exhibit object
+  const [cancelExhibitState, setCancelExhibitState] = useState('idle') // idle | loading | success | error
+  const [cancelExhibitError, setCancelExhibitError] = useState('')
+  const [cancelExhibitDate, setCancelExhibitDate] = useState('')
+
+  const openCancelExhibit = (ex) => {
+    setCancelExhibitTarget(ex)
+    setCancelExhibitState('idle')
+    setCancelExhibitError('')
+    // Default to the exhibit's scheduled date, or empty if none
+    setCancelExhibitDate(ex.ExhibitOffDate ? String(ex.ExhibitOffDate).slice(0, 10) : '')
+  }
+  const closeCancelExhibit = () => {
+    if (cancelExhibitState === 'loading') return
+    setCancelExhibitTarget(null)
+    setCancelExhibitState('idle')
+    setCancelExhibitError('')
+    setCancelExhibitDate('')
+  }
+  // ── Restore Exhibit ──
+  const [restoringExhibitId, setRestoringExhibitId] = useState(null)
+  const handleRestoreExhibit = async (ex) => {
+    setRestoringExhibitId(ex.ExhibitID)
+    try {
+      const uid = user?.userId || user?.UserID || user?.id
+      const res = await fetch(`${apiBase}/api/curator/exhibit/${ex.ExhibitID}/restore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: uid }),
+      })
+      const data = await res.json()
+      if (!res.ok) { alert(data.error || 'Failed to restore exhibit.'); return }
+      setExhibits(prev => prev.map(e =>
+        e.ExhibitID === ex.ExhibitID ? { ...e, Status: 'Active', ExhibitOffDate: null } : e
+      ))
+    } catch { alert('Network error.') }
+    finally { setRestoringExhibitId(null) }
+  }
+
+  const handleCancelExhibit = async () => {
+    if (!cancelExhibitTarget) return
+    if (!cancelExhibitDate) {
+      setCancelExhibitError('Please select the date to cancel.')
+      return
+    }
+    setCancelExhibitState('loading')
+    setCancelExhibitError('')
+    try {
+      const uid = user?.userId || user?.UserID || user?.id
+      const res = await fetch(`${apiBase}/api/curator/exhibit/${cancelExhibitTarget.ExhibitID}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: uid, cancelDate: cancelExhibitDate }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setCancelExhibitError(data.error || 'Failed to cancel exhibit.')
+        setCancelExhibitState('error')
+        return
+      }
+      // Update local state so card reflects new status + date immediately
+      setExhibits(prev => prev.map(ex =>
+        ex.ExhibitID === cancelExhibitTarget.ExhibitID
+          ? { ...ex, Status: 'Cancelled', ExhibitOffDate: cancelExhibitDate }
+          : ex
+      ))
+      setCancelExhibitState('success')
+      // Dispatch so ProfileMenu bell re-fetches curator notification
+      window.dispatchEvent(new CustomEvent('exhibit-cancelled'))
+      setTimeout(() => { closeCancelExhibit() }, 2000)
+    } catch {
+      setCancelExhibitError('Network error.')
+      setCancelExhibitState('error')
+    }
+  }
+
   // ── Exhibit Report ──
   const [rptFilters, setRptFilters] = useState({ dateFrom: '', dateTo: '', sortBy: 'revenue_desc' })
   const [rptRows,    setRptRows]    = useState(null)
@@ -65,6 +150,27 @@ export default function CuratorPortal() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const displayExhibits = exhibits
+
+  // ── Filtered + paginated artifacts ──
+  const filteredArtifacts = artifacts.filter(a => {
+    if (artExhibitFilter && String(a.ExhibitID) !== artExhibitFilter) return false
+    if (artSearch) {
+      const q = artSearch.toLowerCase()
+      if (!(a.Name || '').toLowerCase().includes(q) && !(a.Description || '').toLowerCase().includes(q)) return false
+    }
+    if (artDateFrom) {
+      const d = (a.EntryDate || '').slice(0, 10)
+      if (!d || d < artDateFrom) return false
+    }
+    if (artDateTo) {
+      const d = (a.EntryDate || '').slice(0, 10)
+      if (!d || d > artDateTo) return false
+    }
+    return true
+  })
+  const artTotalPages = Math.max(1, Math.ceil(filteredArtifacts.length / ART_PER_PAGE))
+  const safePage = Math.min(artPage, artTotalPages)
+  const pagedArtifacts = filteredArtifacts.slice((safePage - 1) * ART_PER_PAGE, safePage * ART_PER_PAGE)
 
   const fetchReport = async () => {
     setRptLoading(true); setRptError('')
@@ -263,20 +369,44 @@ export default function CuratorPortal() {
             </div>
             <div className="exhibit-list">
               {displayExhibits.map((ex, i) => (
-                <div key={ex.ExhibitID} className="exhibit-card" style={{ '--accent-color': ACCENT_COLORS[i % ACCENT_COLORS.length] }}>
+                <div key={ex.ExhibitID} className={`exhibit-card${ex.Status === 'Cancelled' ? ' exhibit-card--cancelled' : ''}`} style={{ '--accent-color': ACCENT_COLORS[i % ACCENT_COLORS.length] }}>
                   <div className="exhibit-card-icon">{EXHIBIT_ICONS[i % EXHIBIT_ICONS.length]}</div>
                   <div className="exhibit-card-body">
-                    <div className="ex-name">{ex.ExhibitName}</div>
+                    <div className="ex-name">
+                      {ex.ExhibitName}
+                      {ex.Status === 'Cancelled' && <span className="exhibit-cancelled-badge">Cancelled</span>}
+                    </div>
                     {ex.Description && (
                       <div className="ex-desc">{ex.Description.slice(0, 65)}{ex.Description.length > 65 ? '…' : ''}</div>
                     )}
+                    {ex.ExhibitOffDate && (
+                      <div className="ex-date">📅 {new Date(ex.ExhibitOffDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                    )}
                   </div>
-                  <button
-                    className="add-artifact-btn"
-                    onClick={() => openModal(ex.ExhibitID, ex.ExhibitName)}
-                  >
-                    + Artifact
-                  </button>
+                  <div className="exhibit-card-actions">
+                    <button
+                      className="add-artifact-btn"
+                      onClick={() => openModal(ex.ExhibitID, ex.ExhibitName)}
+                    >
+                      + Artifact
+                    </button>
+                    {ex.Status !== 'Cancelled' ? (
+                      <button
+                        className="cancel-exhibit-btn"
+                        onClick={() => openCancelExhibit(ex)}
+                      >
+                        Cancel
+                      </button>
+                    ) : (
+                      <button
+                        className="restore-exhibit-btn"
+                        onClick={() => handleRestoreExhibit(ex)}
+                        disabled={restoringExhibitId === ex.ExhibitID}
+                      >
+                        {restoringExhibitId === ex.ExhibitID ? 'Restoring…' : '↩ Restore'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -293,9 +423,56 @@ export default function CuratorPortal() {
                 {artifactsLoading ? 'Loading…' : '↻ Refresh'}
               </button>
             </div>
-            {artifacts.length === 0 && !artifactsLoading ? (
-              <div style={{padding:'24px',textAlign:'center',color:'rgba(2,6,23,0.45)'}}>No artifacts found.</div>
+
+            {/* Filters row */}
+            <div className="curator-art-filters">
+              <div className="curator-art-search-wrap">
+                <span className="curator-art-search-icon">🔍</span>
+                <input
+                  className="curator-art-search"
+                  type="text"
+                  placeholder="Search artifacts…"
+                  value={artSearch}
+                  onChange={e => { setArtSearch(e.target.value); setArtPage(1) }}
+                />
+              </div>
+              <select
+                className="curator-art-filter-select"
+                value={artExhibitFilter}
+                onChange={e => { setArtExhibitFilter(e.target.value); setArtPage(1) }}
+              >
+                <option value="">All Exhibits</option>
+                {displayExhibits.map(ex => (
+                  <option key={ex.ExhibitID} value={String(ex.ExhibitID)}>{ex.ExhibitName}</option>
+                ))}
+              </select>
+              <input
+                className="curator-art-filter-date"
+                type="date"
+                title="Date added from"
+                value={artDateFrom}
+                onChange={e => { setArtDateFrom(e.target.value); setArtPage(1) }}
+              />
+              <input
+                className="curator-art-filter-date"
+                type="date"
+                title="Date added to"
+                value={artDateTo}
+                onChange={e => { setArtDateTo(e.target.value); setArtPage(1) }}
+              />
+              {(artSearch || artExhibitFilter || artDateFrom || artDateTo) && (
+                <button className="curator-art-filter-clear" onClick={() => { setArtSearch(''); setArtExhibitFilter(''); setArtDateFrom(''); setArtDateTo(''); setArtPage(1) }}>
+                  Clear
+                </button>
+              )}
+            </div>
+
+            {filteredArtifacts.length === 0 && !artifactsLoading ? (
+              <div style={{padding:'24px',textAlign:'center',color:'rgba(2,6,23,0.45)'}}>
+                {artifacts.length === 0 ? 'No artifacts found.' : 'No artifacts match your filters.'}
+              </div>
             ) : (
+            <>
             <table className="artifacts-table">
               <thead>
                 <tr>
@@ -306,7 +483,7 @@ export default function CuratorPortal() {
                 </tr>
               </thead>
               <tbody>
-                {artifacts.map((a, i) => (
+                {pagedArtifacts.map((a, i) => (
                   <tr key={a.ArtifactID} className={i % 2 === 0 ? 'row-even' : ''}>
                     <td><span className="artifact-name">{a.Name}</span></td>
                     <td><span className="exhibit-tag">{a.ExhibitName || '—'}</span></td>
@@ -321,6 +498,21 @@ export default function CuratorPortal() {
                 ))}
               </tbody>
             </table>
+
+            {/* Pagination */}
+            <div className="curator-art-pagination">
+              <span className="curator-art-page-info">
+                {filteredArtifacts.length} artifact{filteredArtifacts.length !== 1 ? 's' : ''}
+                {' · '}Page {safePage} of {artTotalPages}
+              </span>
+              <div className="curator-art-page-btns">
+                <button disabled={safePage <= 1} onClick={() => setArtPage(1)}>«</button>
+                <button disabled={safePage <= 1} onClick={() => setArtPage(p => Math.max(1, p - 1))}>‹</button>
+                <button disabled={safePage >= artTotalPages} onClick={() => setArtPage(p => Math.min(artTotalPages, p + 1))}>›</button>
+                <button disabled={safePage >= artTotalPages} onClick={() => setArtPage(artTotalPages)}>»</button>
+              </div>
+            </div>
+            </>
             )}
           </div>
 
@@ -421,6 +613,78 @@ export default function CuratorPortal() {
       </main>
 
       <footer className="home-footer">© {new Date().getFullYear()} City Museum — Curator Portal</footer>
+
+      {/* ── Cancel Exhibit modal ── */}
+      {cancelExhibitTarget && (
+        <div className="artifact-modal-overlay" onClick={closeCancelExhibit}>
+          <div className="artifact-modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
+            {cancelExhibitState === 'success' ? (
+              <div className="artifact-form" style={{ textAlign: 'center', padding: '32px 24px' }}>
+                <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+                <h2 style={{ marginBottom: 8 }}>Exhibit Cancelled</h2>
+                <p style={{ color: 'rgba(2,6,23,0.6)' }}>
+                  All affected tickets have been cancelled and visitors have been notified.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="artifact-modal-header">
+                  <h2 className="artifact-modal-title">Cancel Exhibit</h2>
+                  <button className="artifact-modal-close" onClick={closeCancelExhibit} disabled={cancelExhibitState === 'loading'}>✕</button>
+                </div>
+                <div className="artifact-form">
+                  <div className="cancel-exhibit-warning">
+                    ⚠️ You are about to cancel <strong>{cancelExhibitTarget.ExhibitName}</strong>.
+                  </div>
+                  <label className="artifact-label" style={{ marginBottom: 16 }}>
+                    Cancellation Date <span className="artifact-required">*</span>
+                    <input
+                      className="artifact-input"
+                      type="date"
+                      value={cancelExhibitDate}
+                      onChange={e => setCancelExhibitDate(e.target.value)}
+                      disabled={cancelExhibitState === 'loading'}
+                    />
+                    <span style={{ fontSize: 12, color: 'rgba(2,6,23,0.45)', marginTop: 4, display: 'block' }}>
+                      Visitors with tickets on this date will be notified and this date will be blocked for new bookings.
+                    </span>
+                  </label>
+                  <p style={{ marginBottom: 8, fontSize: 14, color: 'rgba(2,6,23,0.7)' }}>
+                    This will:
+                  </p>
+                  <ul className="cancel-exhibit-list">
+                    <li>Mark the exhibit as <strong>Cancelled</strong> on the selected date</li>
+                    <li>Automatically cancel all visitor tickets on that date</li>
+                    <li>Send a notification to each affected visitor</li>
+                    <li>Block new ticket purchases for this exhibit on that date</li>
+                    <li>Visitors can reschedule <strong>free of charge</strong></li>
+                  </ul>
+                  <p className="cancel-exhibit-irreversible">This action cannot be undone.</p>
+                  {cancelExhibitError && <p className="artifact-form-error">{cancelExhibitError}</p>}
+                  <div className="artifact-form-actions">
+                    <button
+                      type="button"
+                      className="btn ghost"
+                      onClick={closeCancelExhibit}
+                      disabled={cancelExhibitState === 'loading'}
+                    >
+                      Keep Exhibit
+                    </button>
+                    <button
+                      type="button"
+                      className="btn curator-btn-danger"
+                      onClick={handleCancelExhibit}
+                      disabled={cancelExhibitState === 'loading'}
+                    >
+                      {cancelExhibitState === 'loading' ? 'Cancelling…' : 'Yes, Cancel Exhibit'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Edit Artifact modal ── */}
       {editModal && (

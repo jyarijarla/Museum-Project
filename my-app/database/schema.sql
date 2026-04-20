@@ -239,11 +239,9 @@ CREATE TABLE `Staff` (
   `EmployeeID` int NOT NULL AUTO_INCREMENT,
   `UserID` int DEFAULT NULL,
   `DepartmentID` int NOT NULL,
-  `SupervisorID` int DEFAULT NULL,
-  `JobID` int DEFAULT NULL,
-  `Salary` decimal(10,2) DEFAULT NULL,
   `FirstName` varchar(40) NOT NULL,
   `LastName` varchar(40) NOT NULL,
+  `DateOfBirth` date DEFAULT NULL,
   `Address` varchar(400) DEFAULT NULL,
   `Email` varchar(255) DEFAULT NULL,
   `PhoneNumber` varchar(11) DEFAULT NULL,
@@ -251,13 +249,8 @@ CREATE TABLE `Staff` (
   PRIMARY KEY (`EmployeeID`),
   UNIQUE KEY `UserID` (`UserID`),
   KEY `DepartmentID` (`DepartmentID`),
-  KEY `SupervisorID` (`SupervisorID`),
-  KEY `JobID` (`JobID`),
   CONSTRAINT `StaffUserID` FOREIGN KEY (`UserID`) REFERENCES `UserAccount` (`UserID`),
-  CONSTRAINT `StaffDepartment` FOREIGN KEY (`DepartmentID`) REFERENCES `Department` (`DepartmentID`),
-  CONSTRAINT `StaffSupervisor` FOREIGN KEY (`SupervisorID`) REFERENCES `Staff` (`EmployeeID`),
-  CONSTRAINT `StaffJob` FOREIGN KEY (`JobID`) REFERENCES `Job` (`JobID`),
-  CONSTRAINT `StaffCheckSalaryAboveZero` CHECK (`Salary` > 0)
+  CONSTRAINT `StaffDepartment` FOREIGN KEY (`DepartmentID`) REFERENCES `Department` (`DepartmentID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -331,6 +324,7 @@ CREATE TABLE `UserAccount` (
   `Username` varchar(50) NOT NULL,
   `PasswordHash` varchar(255) NOT NULL,
   `Role` enum('Admin', 'Gift_Shop_Manager', 'Employee', 'Visitor') NOT NULL,
+  `IsActive` tinyint(1) NOT NULL DEFAULT 1,
   PRIMARY KEY (`UserID`),
   UNIQUE KEY `Username` (`Username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

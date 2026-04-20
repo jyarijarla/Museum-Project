@@ -1,0 +1,176 @@
+@import "../Home/Home.css";
+
+/* ── Generic Exhibit Detail Page ── */
+
+/* Hero */
+.gen-ex-hero {
+  padding: 64px 48px;
+  background: linear-gradient(135deg, #1e40af, #2563eb);
+  color: #fff;
+  text-align: center;
+}
+.gen-ex-hero-inner {
+  max-width: 700px;
+  margin: 0 auto;
+}
+.gen-ex-badge {
+  display: inline-block;
+  background: rgba(255,255,255,0.15);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255,255,255,0.2);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 6px 16px;
+  border-radius: 999px;
+  margin-bottom: 16px;
+}
+.gen-ex-title {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 800;
+  margin: 0 0 12px;
+  line-height: 1.15;
+}
+.gen-ex-desc {
+  font-size: 1.05rem;
+  opacity: 0.9;
+  line-height: 1.7;
+  margin: 0 0 20px;
+}
+.gen-ex-meta {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  flex-wrap: wrap;
+  font-size: 13px;
+  opacity: 0.85;
+}
+.gen-ex-meta span {
+  background: rgba(255,255,255,0.1);
+  padding: 6px 14px;
+  border-radius: 8px;
+}
+
+/* Status banner */
+.gen-ex-cancelled {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  text-align: center;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Main content */
+.gen-ex-main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 40px 48px 60px;
+}
+
+/* Artifacts section */
+.gen-ex-section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.gen-ex-section-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text, #0a0f2c);
+}
+.gen-ex-artifact-count {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* Artifact cards grid */
+.gen-ex-artifacts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+.gen-ex-artifact-card {
+  background: var(--card, #fff);
+  border-radius: 14px;
+  border: 1px solid rgba(2,6,23,0.06);
+  box-shadow: 0 4px 16px rgba(2,6,23,0.04);
+  overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.gen-ex-artifact-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(2,6,23,0.1);
+}
+.gen-ex-artifact-img {
+  width: 100%;
+  height: 180px;
+  object-fit: cover;
+  display: block;
+  background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
+}
+.gen-ex-artifact-body {
+  padding: 16px;
+}
+.gen-ex-artifact-body h4 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text, #0a0f2c);
+}
+.gen-ex-artifact-body p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.gen-ex-artifact-date {
+  font-size: 11px;
+  color: rgba(2,6,23,0.4);
+}
+
+/* Ticket cta */
+.gen-ex-ticket-cta {
+  margin-top: 40px;
+  text-align: center;
+  padding: 32px;
+  background: #f0f4ff;
+  border-radius: 14px;
+  border: 1px solid rgba(37,99,235,0.1);
+}
+.gen-ex-ticket-cta h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.gen-ex-ticket-cta p {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* Empty / loading */
+.gen-ex-empty {
+  text-align: center;
+  padding: 40px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.gen-ex-loading {
+  text-align: center;
+  padding: 80px 20px;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+@media (max-width: 700px) {
+  .gen-ex-hero { padding: 40px 20px; }
+  .gen-ex-main { padding: 24px 20px 40px; }
+  .gen-ex-artifacts-grid { grid-template-columns: 1fr; }
+}

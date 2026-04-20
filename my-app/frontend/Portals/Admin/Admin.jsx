@@ -34,6 +34,206 @@ export default function Admin() {
 
   // ── Tabs ───────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState('overview')
+  const adminUserId = user?.userId || user?.UserID || user?.id
+
+  // ── User Management ─────────────────────────────────────────────────────────
+  const [userMgmtRole, setUserMgmtRole] = useState('Visitor')
+  const [managedUsers, setManagedUsers] = useState([])
+  const [managedUsersLoading, setManagedUsersLoading] = useState(false)
+  const [managedUsersError, setManagedUsersError] = useState('')
+  const [editUserModal, setEditUserModal] = useState(null)
+  const [editUserSubmitting, setEditUserSubmitting] = useState(false)
+  const [editUserError, setEditUserError] = useState('')
+  const [deleteUserModal, setDeleteUserModal] = useState(null)
+  const [deleteUserSubmitting, setDeleteUserSubmitting] = useState(false)
+  const [deleteUserError, setDeleteUserError] = useState('')
+
+  // ── Exhibit Management ─────────────────────────────────────────────────────
+  const [exhibitsList, setExhibitsList] = useState([])
+  const [exhibitsLoading, setExhibitsLoading] = useState(false)
+  const [exhibitModal, setExhibitModal] = useState(null) // null=closed, {}=add, {ExhibitID:..}=edit
+  const [exhibitForm, setExhibitForm] = useState({ exhibitName: '', description: '', maxCapacity: 100, regularPrice: '' })
+  const [exhibitSubmitting, setExhibitSubmitting] = useState(false)
+  const [exhibitError, setExhibitError] = useState('')
+  const [deleteExhibitModal, setDeleteExhibitModal] = useState(null)
+  const [deleteExhibitSubmitting, setDeleteExhibitSubmitting] = useState(false)
+  const [deleteExhibitError, setDeleteExhibitError] = useState('')
+
+  const loadExhibits = useCallback(() => {
+    setExhibitsLoading(true)
+    fetch(`${apiBase}/api/exhibits`)
+      .then(r => r.json())
+      .then(d => setExhibitsList(d.exhibits || []))
+      .catch(console.error)
+      .finally(() => setExhibitsLoading(false))
+  }, [apiBase])
+
+  useEffect(() => {
+    if (activeTab === 'exhibits') loadExhibits()
+  }, [activeTab, loadExhibits])
+
+  const openAddExhibit = () => {
+    setExhibitForm({ exhibitName: '', description: '', maxCapacity: 100, regularPrice: '' })
+    setExhibitError('')
+    setExhibitModal({})
+  }
+  const openEditExhibit = (ex) => {
+    setExhibitForm({
+      exhibitName: ex.ExhibitName || '',
+      description: ex.Description || '',
+      maxCapacity: ex.MaxCapacity || 100,
+      regularPrice: ex.regularPrice ?? '',
+    })
+    setExhibitError('')
+    setExhibitModal(ex)
+  }
+  const saveExhibit = async () => {
+    setExhibitError('')
+    if (!exhibitForm.exhibitName.trim()) { setExhibitError('Name is required'); return }
+    if (!exhibitForm.regularPrice || Number(exhibitForm.regularPrice) <= 0) { setExhibitError('Regular price must be > 0'); return }
+    setExhibitSubmitting(true)
+    try {
+      const isEdit = exhibitModal?.ExhibitID
+      const url = isEdit ? `${apiBase}/api/admin/exhibits/${exhibitModal.ExhibitID}` : `${apiBase}/api/admin/exhibits`
+      const res = await fetch(url, {
+        method: isEdit ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...exhibitForm, userId: adminUserId })
+      })
+      const data = await res.json()
+      if (!res.ok) { setExhibitError(data.error || 'Failed'); return }
+      setExhibitModal(null)
+      loadExhibits()
+    } catch { setExhibitError('Server error') }
+    finally { setExhibitSubmitting(false) }
+  }
+  const confirmDeleteExhibit = async () => {
+    if (!deleteExhibitModal) return
+    setDeleteExhibitSubmitting(true)
+    setDeleteExhibitError('')
+    try {
+      const res = await fetch(`${apiBase}/api/admin/exhibits/${deleteExhibitModal.ExhibitID}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: adminUserId })
+      })
+      const data = await res.json()
+      if (!res.ok) { setDeleteExhibitError(data.error || 'Failed'); return }
+      setDeleteExhibitModal(null)
+      loadExhibits()
+    } catch { setDeleteExhibitError('Server error') }
+    finally { setDeleteExhibitSubmitting(false) }
+  }
+
+  const loadManagedUsers = useCallback(() => {
+    if (!adminUserId) return
+    setManagedUsersLoading(true)
+    setManagedUsersError('')
+    fetch(`${apiBase}/api/admin/users?userId=${adminUserId}&role=${encodeURIComponent(userMgmtRole)}`)
+      .then(async r => {
+        const d = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(d?.error || 'Failed to load users')
+        setManagedUsers(d.users || [])
+      })
+      .catch(e => setManagedUsersError(String(e?.message || e)))
+      .finally(() => setManagedUsersLoading(false))
+  }, [apiBase, adminUserId, userMgmtRole])
+
+  useEffect(() => {
+    if (activeTab === 'users') loadManagedUsers()
+  }, [activeTab, loadManagedUsers])
+
+  const openEditUserModal = (u) => {
+    setEditUserError('')
+    setEditUserModal({
+      UserID: u.UserID,
+      Username: u.Username || '',
+      FirstName: u.FirstName || '',
+      LastName: u.LastName || '',
+      Email: u.Email || '',
+      PhoneNumber: u.PhoneNumber || '',
+      DateOfBirth: u.DateOfBirth || '',
+      Address: u.Address || '',
+      HireDate: u.HireDate || '',
+    })
+  }
+
+  const saveManagedUser = async () => {
+    if (!editUserModal || !adminUserId) return
+    setEditUserSubmitting(true)
+    setEditUserError('')
+    try {
+      const res = await fetch(`${apiBase}/api/admin/users/${editUserModal.UserID}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: adminUserId,
+          username: editUserModal.Username,
+          firstName: editUserModal.FirstName,
+          lastName: editUserModal.LastName,
+          email: editUserModal.Email,
+          phoneNumber: editUserModal.PhoneNumber,
+          dateOfBirth: editUserModal.DateOfBirth || null,
+          address: editUserModal.Address || null,
+          hireDate: editUserModal.HireDate || null,
+        })
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.success) {
+        setEditUserError(data?.error || 'Failed to save user changes')
+        return
+      }
+      setEditUserModal(null)
+      loadManagedUsers()
+    } catch {
+      setEditUserError('Network error. Please try again.')
+    } finally {
+      setEditUserSubmitting(false)
+    }
+  }
+
+  const deleteManagedUser = (u) => {
+    setDeleteUserError('')
+    setDeleteUserModal(u)
+  }
+
+  const confirmDeleteManagedUser = async () => {
+    if (!adminUserId || !deleteUserModal) return
+    setDeleteUserSubmitting(true)
+    setDeleteUserError('')
+    try {
+      const res = await fetch(`${apiBase}/api/admin/users/${deleteUserModal.UserID}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: adminUserId })
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.success) {
+        setDeleteUserError(data?.error || 'Failed to deactivate account')
+        return
+      }
+      setManagedUsers(prev => prev.map(u => Number(u.UserID) === Number(deleteUserModal.UserID) ? { ...u, IsActive: 0 } : u))
+      setDeleteUserModal(null)
+    } catch {
+      setDeleteUserError('Network error while deactivating account')
+    } finally {
+      setDeleteUserSubmitting(false)
+    }
+  }
+
+  const reactivateManagedUser = async (u) => {
+    if (!adminUserId) return
+    try {
+      const res = await fetch(`${apiBase}/api/admin/users/${u.UserID}/reactivate`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: adminUserId })
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data?.success) return
+      setManagedUsers(prev => prev.map(x => Number(x.UserID) === Number(u.UserID) ? { ...x, IsActive: 1 } : x))
+    } catch {}
+  }
 
   // ── Tickets report ─────────────────────────────────────────────────────────
   const [tf, setTf] = useState({ dateFrom:'', dateTo:'', purchaseDateFrom:'', purchaseDateTo:'', status:'', sortBy:'purchase_desc', groupBy:'' })
@@ -220,7 +420,7 @@ export default function Admin() {
 
         {/* Tab nav */}
         <nav className="adm-tab-nav">
-          {[['overview','📊 Overview'],['tickets','🎟 Tickets'],['memberships','🪪 Memberships'],['memexhibit','🏛️ Membership × Exhibit']].map(([id, label]) => (
+          {[['overview','📊 Overview'],['tickets','🎟 Tickets'],['memberships','🪪 Memberships'],['exhibits','🏛️ Exhibits'],['memexhibit','📈 Membership × Exhibit'],['users','👥 User Management']].map(([id, label]) => (
             <button key={id} className={`adm-tab-btn${activeTab === id ? ' active' : ''}`} onClick={() => setActiveTab(id)}>{label}</button>
           ))}
         </nav>
@@ -564,7 +764,239 @@ export default function Admin() {
             </div>
           </div>
         )}
+
+        {/* ── EXHIBITS TAB ── */}
+        {activeTab === 'exhibits' && (
+          <div className="adm-tab-content">
+            <div className="adm-section">
+              <div className="adm-section-header">
+                <h2>Exhibit Management</h2>
+                <button className="btn primary" onClick={openAddExhibit}>+ Add Exhibit</button>
+              </div>
+
+              {exhibitsLoading ? (
+                <div className="adm-empty">Loading exhibits…</div>
+              ) : exhibitsList.length === 0 ? (
+                <div className="adm-empty">No exhibits found.</div>
+              ) : (
+                <div className="adm-table-wrap">
+                  <table className="adm-table">
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Status</th>
+                        <th>Capacity</th>
+                        <th style={{textAlign:'right'}}>Price</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {exhibitsList.map(ex => (
+                        <tr key={ex.ExhibitID}>
+                          <td>{ex.ExhibitID}</td>
+                          <td style={{fontWeight:600}}>{ex.ExhibitName}</td>
+                          <td>
+                            <span className={`adm-badge ${ex.Status === 'Active' ? 'active' : 'deactivated'}`}>
+                              {ex.Status || 'Active'}
+                            </span>
+                          </td>
+                          <td>{ex.MaxCapacity}</td>
+                          <td style={{textAlign:'right'}}>{ex.regularPrice ? `$${Number(ex.regularPrice).toFixed(2)}` : '—'}</td>
+                          <td>
+                            <div style={{display:'flex', gap:6}}>
+                              <button className="btn ghost" style={{padding:'4px 10px', fontSize:13}} onClick={() => openEditExhibit(ex)}>Edit</button>
+                              <button className="btn ghost" style={{padding:'4px 10px', fontSize:13, color:'#dc2626'}} onClick={() => { setDeleteExhibitError(''); setDeleteExhibitModal(ex) }}>Delete</button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="adm-row-count">{exhibitsList.length} exhibit{exhibitsList.length !== 1 ? 's' : ''}</div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'users' && (
+          <div className="adm-tab-content">
+            <div className="adm-section">
+              <div className="adm-section-header">
+                <h2>User Management</h2>
+                <div className="adm-row-filters">
+                  <div className="adm-mini-tabs" role="tablist" aria-label="User management account type">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={userMgmtRole === 'Visitor'}
+                      className={`adm-mini-tab${userMgmtRole === 'Visitor' ? ' active' : ''}`}
+                      onClick={() => setUserMgmtRole('Visitor')}
+                    >
+                      Visitors
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={userMgmtRole === 'Curator'}
+                      className={`adm-mini-tab${userMgmtRole === 'Curator' ? ' active' : ''}`}
+                      onClick={() => setUserMgmtRole('Curator')}
+                    >
+                      Curators
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={userMgmtRole === 'Gift_Shop_Manager'}
+                      className={`adm-mini-tab${userMgmtRole === 'Gift_Shop_Manager' ? ' active' : ''}`}
+                      onClick={() => setUserMgmtRole('Gift_Shop_Manager')}
+                    >
+                      Gift Shop Managers
+                    </button>
+                  </div>
+                  <button className="btn primary" onClick={loadManagedUsers} disabled={managedUsersLoading}>
+                    {managedUsersLoading ? 'Loading…' : 'Refresh'}
+                  </button>
+                </div>
+              </div>
+
+              {managedUsersError && <div className="adm-error">{managedUsersError}</div>}
+
+              {managedUsers.length > 0 ? (
+                <div className="adm-table-wrap">
+                  <table className="adm-table">
+                    <thead>
+                      <tr>
+                        <th>User ID</th>
+                        <th>Username</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>{userMgmtRole === 'Visitor' ? 'Date of Birth' : 'Hire Date'}</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {managedUsers.map((u) => (
+                        <tr key={u.UserID} style={u.IsActive === 0 ? { opacity: 0.55 } : undefined}>
+                          <td>#{u.UserID}</td>
+                          <td>{u.Username || '—'}</td>
+                          <td>{u.FirstName || ''} {u.LastName || ''}</td>
+                          <td>{u.Email || '—'}</td>
+                          <td>{u.PhoneNumber || '—'}</td>
+                          <td>{(userMgmtRole === 'Visitor' ? u.DateOfBirth : u.HireDate) || '—'}</td>
+                          <td>
+                            <span style={{ padding: '2px 10px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                              background: u.IsActive === 0 ? 'rgba(239,68,68,0.10)' : 'rgba(34,197,94,0.10)',
+                              color: u.IsActive === 0 ? '#b91c1c' : '#15803d' }}>
+                              {u.IsActive === 0 ? 'Deactivated' : 'Active'}
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <button className="btn ghost" onClick={() => openEditUserModal(u)}>Edit</button>
+                              {u.IsActive === 0 ? (
+                                <button className="btn" style={{ borderColor: '#22c55e', color: '#15803d' }} onClick={() => reactivateManagedUser(u)}>Reactivate</button>
+                              ) : (
+                                <button className="btn" style={{ borderColor: '#ef4444', color: '#b91c1c' }} onClick={() => deleteManagedUser(u)}>Deactivate</button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="adm-row-count">{managedUsers.length} user{managedUsers.length !== 1 ? 's' : ''}</div>
+                </div>
+              ) : (
+                !managedUsersLoading && <div className="adm-empty">No {userMgmtRole.toLowerCase()} accounts found.</div>
+              )}
+            </div>
+          </div>
+        )}
       </main>
+
+      {deleteUserModal && (
+        <div className="artifact-modal-overlay" onClick={() => { if (!deleteUserSubmitting) setDeleteUserModal(null) }}>
+          <div className="artifact-modal" style={{maxWidth:460}} onClick={e => e.stopPropagation()}>
+            <div className="artifact-modal-header">
+              <h2>Deactivate Account</h2>
+              <button className="artifact-modal-close" onClick={() => setDeleteUserModal(null)}>✕</button>
+            </div>
+            <div className="artifact-form">
+              <p style={{ margin: 0, color: 'rgba(2,6,23,0.65)', lineHeight: 1.5 }}>
+                Are you sure you want to deactivate this account? The user will no longer be able to log in.
+              </p>
+              <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(239,68,68,0.18)', background: 'rgba(239,68,68,0.06)' }}>
+                <div><strong>User:</strong> #{deleteUserModal.UserID} · {deleteUserModal.Username || '—'}</div>
+                <div><strong>Name:</strong> {deleteUserModal.FirstName || ''} {deleteUserModal.LastName || ''}</div>
+                <div><strong>Role:</strong> {userMgmtRole}</div>
+              </div>
+              {deleteUserError && <p className="artifact-form-error">{deleteUserError}</p>}
+              <div className="artifact-form-actions">
+                <button type="button" className="btn ghost" disabled={deleteUserSubmitting} onClick={() => setDeleteUserModal(null)}>Cancel</button>
+                <button type="button" className="btn" style={{ borderColor: '#ef4444', color: '#b91c1c' }} disabled={deleteUserSubmitting} onClick={confirmDeleteManagedUser}>
+                  {deleteUserSubmitting ? 'Deactivating…' : 'Deactivate Account'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editUserModal && (
+        <div className="artifact-modal-overlay" onClick={() => { if (!editUserSubmitting) setEditUserModal(null) }}>
+          <div className="artifact-modal" style={{maxWidth:540}} onClick={e => e.stopPropagation()}>
+            <div className="artifact-modal-header">
+              <h2>Edit {userMgmtRole === 'Curator' ? 'Curator' : 'Visitor'} Account</h2>
+              <button className="artifact-modal-close" onClick={() => setEditUserModal(null)}>✕</button>
+            </div>
+            <div className="artifact-form">
+              <label className="artifact-label">Username
+                <input className="artifact-input" value={editUserModal.Username} onChange={e => setEditUserModal(s => ({ ...s, Username: e.target.value }))} />
+              </label>
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12}}>
+                <label className="artifact-label">First Name
+                  <input className="artifact-input" value={editUserModal.FirstName} onChange={e => setEditUserModal(s => ({ ...s, FirstName: e.target.value }))} />
+                </label>
+                <label className="artifact-label">Last Name
+                  <input className="artifact-input" value={editUserModal.LastName} onChange={e => setEditUserModal(s => ({ ...s, LastName: e.target.value }))} />
+                </label>
+              </div>
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12}}>
+                <label className="artifact-label">Email
+                  <input className="artifact-input" value={editUserModal.Email} onChange={e => setEditUserModal(s => ({ ...s, Email: e.target.value }))} />
+                </label>
+                <label className="artifact-label">Phone
+                  <input className="artifact-input" value={editUserModal.PhoneNumber} onChange={e => setEditUserModal(s => ({ ...s, PhoneNumber: e.target.value }))} />
+                </label>
+              </div>
+              <label className="artifact-label">Address
+                <input className="artifact-input" value={editUserModal.Address} onChange={e => setEditUserModal(s => ({ ...s, Address: e.target.value }))} />
+              </label>
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12}}>
+                <label className="artifact-label">Date of Birth
+                  <input className="artifact-input" type="date" value={editUserModal.DateOfBirth || ''} onChange={e => setEditUserModal(s => ({ ...s, DateOfBirth: e.target.value }))} />
+                </label>
+                {userMgmtRole === 'Curator' && (
+                  <label className="artifact-label">Hire Date
+                    <input className="artifact-input" type="date" value={editUserModal.HireDate || ''} onChange={e => setEditUserModal(s => ({ ...s, HireDate: e.target.value }))} />
+                  </label>
+                )}
+              </div>
+              {editUserError && <p className="artifact-form-error">{editUserError}</p>}
+              <div className="artifact-form-actions">
+                <button type="button" className="btn ghost" onClick={() => setEditUserModal(null)}>Cancel</button>
+                <button type="button" className="btn primary" onClick={saveManagedUser} disabled={editUserSubmitting}>
+                  {editUserSubmitting ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {createModal && (
         <div className="artifact-modal-overlay" onClick={closeCreateModal}>
@@ -641,6 +1073,65 @@ export default function Admin() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add / Edit Exhibit Modal ── */}
+      {exhibitModal !== null && (
+        <div className="artifact-modal-overlay" onClick={() => setExhibitModal(null)}>
+          <div className="artifact-modal" onClick={e => e.stopPropagation()} style={{maxWidth:520}}>
+            <div className="artifact-modal-header">
+              <h2>{exhibitModal.ExhibitID ? 'Edit Exhibit' : 'Add Exhibit'}</h2>
+              <button className="artifact-modal-close" onClick={() => setExhibitModal(null)}>✕</button>
+            </div>
+            <div className="artifact-form" style={{display:'flex', flexDirection:'column', gap:12}}>
+              <label className="artifact-label">Exhibit Name <span className="artifact-required">*</span>
+                <input className="artifact-input" value={exhibitForm.exhibitName} onChange={e => setExhibitForm(f => ({...f, exhibitName: e.target.value}))} />
+              </label>
+              <label className="artifact-label">Description
+                <textarea className="artifact-input" rows={3} value={exhibitForm.description} onChange={e => setExhibitForm(f => ({...f, description: e.target.value}))} style={{resize:'vertical', fontFamily:'inherit'}} />
+              </label>
+              <label className="artifact-label">Max Capacity
+                <input className="artifact-input" type="number" min={1} value={exhibitForm.maxCapacity} onChange={e => setExhibitForm(f => ({...f, maxCapacity: e.target.value}))} />
+              </label>
+              <label className="artifact-label">Ticket Price ($) <span className="artifact-required">*</span>
+                <input className="artifact-input" type="number" min={0.01} step={0.01} value={exhibitForm.regularPrice} onChange={e => setExhibitForm(f => ({...f, regularPrice: e.target.value}))} />
+                <span style={{fontSize:12, color:'rgba(2,6,23,0.45)', marginTop:4}}>Members receive their membership discount automatically at checkout</span>
+              </label>
+              {exhibitError && <p className="artifact-form-error">{exhibitError}</p>}
+              <div className="artifact-form-actions">
+                <button className="btn ghost" onClick={() => setExhibitModal(null)}>Cancel</button>
+                <button className="btn primary" onClick={saveExhibit} disabled={exhibitSubmitting}>
+                  {exhibitSubmitting ? 'Saving…' : exhibitModal.ExhibitID ? 'Save Changes' : 'Create Exhibit'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Exhibit Confirmation Modal ── */}
+      {deleteExhibitModal && (
+        <div className="artifact-modal-overlay" onClick={() => setDeleteExhibitModal(null)}>
+          <div className="artifact-modal" onClick={e => e.stopPropagation()} style={{maxWidth:440}}>
+            <div className="artifact-modal-header">
+              <h2>Delete Exhibit</h2>
+              <button className="artifact-modal-close" onClick={() => setDeleteExhibitModal(null)}>✕</button>
+            </div>
+            <p style={{margin:'0 0 12px', fontSize:14, color:'var(--muted)'}}>
+              Are you sure you want to delete <strong>{deleteExhibitModal.ExhibitName}</strong>? This cannot be undone.
+            </p>
+            <p style={{margin:'0 0 16px', fontSize:13, color:'rgba(2,6,23,0.5)'}}>
+              If tickets have been sold or artifacts exist for this exhibit, deletion will be blocked.
+            </p>
+            {deleteExhibitError && <p className="artifact-form-error">{deleteExhibitError}</p>}
+            <div className="artifact-form-actions">
+              <button className="btn ghost" onClick={() => setDeleteExhibitModal(null)}>Cancel</button>
+              <button className="btn primary" style={{background:'#dc2626'}} onClick={confirmDeleteExhibit} disabled={deleteExhibitSubmitting}>
+                {deleteExhibitSubmitting ? 'Deleting…' : 'Delete Exhibit'}
+              </button>
+            </div>
           </div>
         </div>
       )}

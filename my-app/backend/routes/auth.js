@@ -1,8 +1,8 @@
-import express from "express";
-import { db } from "../db.js";
-import bcrypt from "bcryptjs";
+import { createRouter } from '../lib/miniRouter.js'
+import { db } from '../db.js'
+import bcrypt from 'bcryptjs'
 
-const router = express.Router();
+const router = createRouter()
 
 // Detect TransactionRecord schema once and cache — AWS uses TotalAmount, local uses Revenue
 let _txRevenueCol = null
@@ -142,6 +142,11 @@ router.post("/login", async (req, res) => {
 
     const user = rows[0];
     console.log('[auth] found user:', { UserID: user.UserID, Username: user.Username, Role: user.Role, pwHashLength: user.PasswordHash ? user.PasswordHash.length : 0 });
+
+    if (user.IsActive === 0) {
+      return res.status(403).json({ error: "Account has been deactivated" });
+    }
+
     console.log('[auth] password provided length:', password ? password.length : 0);
     const valid = await bcrypt.compare(password, user.PasswordHash || '');
 
@@ -166,6 +171,60 @@ router.post("/login", async (req, res) => {
   }
 });
 
+//
+// 🔹 RESET PASSWORD
+//
+router.post("/reset-password", async (req, res) => {
+  const { username, email, newPassword } = req.body;
+
+  if (!username || !email || !newPassword) {
+    return res.status(400).json({ error: "Username, email, and new password are required" });
+  }
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: "Password must be at least 6 characters" });
+  }
+
+  try {
+    // Find user by username and verify email matches (check both Visitor and Staff emails)
+    const [rows] = await db.execute(
+      `SELECT ua.UserID, ua.Username, ua.IsActive,
+              v.Email AS VisitorEmail,
+              s.Email AS StaffEmail
+       FROM UserAccount ua
+       LEFT JOIN Visitor v ON v.UserID = ua.UserID
+       LEFT JOIN Staff s   ON s.UserID = ua.UserID
+       WHERE ua.Username = ?`,
+      [username]
+    );
+
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ error: "No account found with that username" });
+    }
+
+    const user = rows[0];
+    const userEmail = user.VisitorEmail || user.StaffEmail;
+
+    if (!userEmail || userEmail.toLowerCase() !== email.toLowerCase()) {
+      return res.status(401).json({ error: "Email does not match the account on file" });
+    }
+
+    if (user.IsActive === 0) {
+      return res.status(403).json({ error: "Account has been deactivated" });
+    }
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    await db.execute(
+      "UPDATE UserAccount SET PasswordHash = ? WHERE UserID = ?",
+      [hash, user.UserID]
+    );
+
+    res.json({ message: "Password reset successfully" });
+  } catch (err) {
+    console.error("Reset password error:", err);
+    res.status(500).json({ error: "Password reset failed" });
+  }
+});
+
 // DEBUG: fetch visitor by user id (tries UserID then VisitorID)
 router.get('/visitor/:id', async (req, res) => {
   const { id } = req.params
@@ -179,6 +238,189 @@ router.get('/visitor/:id', async (req, res) => {
   } catch (err) {
     console.error('Visitor lookup failed:', err)
     res.status(500).json({ error: String(err) })
+  }
+})
+
+// GET /api/profile/:id — unified profile view for any user role
+router.get('/profile/:id', async (req, res) => {
+  const { id } = req.params
+  try {
+    const [rows] = await db.execute(
+      `SELECT ua.UserID, ua.Username, ua.Role,
+              v.VisitorID,
+              v.FirstName AS VisitorFirstName,
+              v.LastName  AS VisitorLastName,
+              v.Email     AS VisitorEmail,
+              v.PhoneNumber AS VisitorPhone,
+              DATE_FORMAT(v.DateOfBirth, '%Y-%m-%d') AS VisitorDOB,
+              v.Address   AS VisitorAddress,
+              s.EmployeeID,
+              s.FirstName AS StaffFirstName,
+              s.LastName  AS StaffLastName,
+              s.Email     AS StaffEmail,
+              s.PhoneNumber AS StaffPhone,
+              DATE_FORMAT(s.DateOfBirth, '%Y-%m-%d') AS StaffDOB,
+              DATE_FORMAT(s.HireDate, '%Y-%m-%d') AS StaffHireDate,
+              s.Address   AS StaffAddress
+       FROM UserAccount ua
+       LEFT JOIN Visitor v ON v.UserID = ua.UserID
+       LEFT JOIN Staff s ON s.UserID = ua.UserID
+       WHERE ua.UserID = ?
+       LIMIT 1`,
+      [id]
+    )
+    if (!rows || rows.length === 0) return res.status(404).json({ error: 'User not found' })
+
+    const r = rows[0]
+    const isVisitor = !!r.VisitorID
+    const profile = {
+      UserID: r.UserID,
+      Username: r.Username,
+      Role: r.Role,
+      FirstName: isVisitor ? r.VisitorFirstName : r.StaffFirstName,
+      LastName: isVisitor ? r.VisitorLastName : r.StaffLastName,
+      Email: isVisitor ? r.VisitorEmail : r.StaffEmail,
+      PhoneNumber: isVisitor ? r.VisitorPhone : r.StaffPhone,
+      DateOfBirth: isVisitor ? r.VisitorDOB : r.StaffDOB,
+      Address: isVisitor ? r.VisitorAddress : r.StaffAddress,
+      HireDate: isVisitor ? null : r.StaffHireDate,
+      VisitorID: r.VisitorID || null,
+      EmployeeID: r.EmployeeID || null,
+      IsVisitor: isVisitor,
+    }
+
+    res.json({ profile })
+  } catch (err) {
+    console.error('Profile lookup failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// PUT /api/profile/:id — update own profile information
+router.put('/profile/:id', async (req, res) => {
+  const userId = Number(req.params.id)
+  const {
+    username,
+    firstName,
+    lastName,
+    email,
+    phoneNumber,
+    dateOfBirth,
+    address,
+    hireDate,
+  } = req.body || {}
+
+  if (!userId) return res.status(400).json({ error: 'Invalid user id' })
+
+  let conn
+  try {
+    conn = await db.getConnection()
+    await conn.beginTransaction()
+
+    const [urows] = await conn.execute(
+      'SELECT UserID, Role FROM UserAccount WHERE UserID = ? LIMIT 1',
+      [userId]
+    )
+    if (!urows || urows.length === 0) {
+      await conn.rollback()
+      return res.status(404).json({ error: 'User not found' })
+    }
+
+    if (username && String(username).trim()) {
+      await conn.execute('UPDATE UserAccount SET Username = ? WHERE UserID = ?', [String(username).trim(), userId])
+    }
+
+    const [vrows] = await conn.execute('SELECT VisitorID FROM Visitor WHERE UserID = ? LIMIT 1', [userId])
+    if (vrows && vrows.length > 0) {
+      await conn.execute(
+        `UPDATE Visitor
+         SET FirstName = ?, LastName = ?, Email = ?, PhoneNumber = ?, DateOfBirth = ?, Address = ?
+         WHERE UserID = ?`,
+        [
+          firstName || null,
+          lastName || null,
+          email || null,
+          phoneNumber || null,
+          dateOfBirth || null,
+          address || null,
+          userId,
+        ]
+      )
+    } else {
+      const [srows] = await conn.execute('SELECT EmployeeID FROM Staff WHERE UserID = ? LIMIT 1', [userId])
+      if (srows && srows.length > 0) {
+        await conn.execute(
+          `UPDATE Staff
+           SET FirstName = ?, LastName = ?, Email = ?, PhoneNumber = ?, DateOfBirth = ?, Address = ?, HireDate = COALESCE(?, HireDate)
+           WHERE UserID = ?`,
+          [
+            firstName || null,
+            lastName || null,
+            email || null,
+            phoneNumber || null,
+            dateOfBirth || null,
+            address || null,
+            hireDate || null,
+            userId,
+          ]
+        )
+      }
+    }
+
+    await conn.commit()
+
+    const [updated] = await db.execute(
+      `SELECT ua.UserID, ua.Username, ua.Role,
+              v.VisitorID,
+              v.FirstName AS VisitorFirstName,
+              v.LastName  AS VisitorLastName,
+              v.Email     AS VisitorEmail,
+              v.PhoneNumber AS VisitorPhone,
+              DATE_FORMAT(v.DateOfBirth, '%Y-%m-%d') AS VisitorDOB,
+              v.Address   AS VisitorAddress,
+              s.EmployeeID,
+              s.FirstName AS StaffFirstName,
+              s.LastName  AS StaffLastName,
+              s.Email     AS StaffEmail,
+              s.PhoneNumber AS StaffPhone,
+              DATE_FORMAT(s.DateOfBirth, '%Y-%m-%d') AS StaffDOB,
+              DATE_FORMAT(s.HireDate, '%Y-%m-%d') AS StaffHireDate,
+              s.Address   AS StaffAddress
+       FROM UserAccount ua
+       LEFT JOIN Visitor v ON v.UserID = ua.UserID
+       LEFT JOIN Staff s ON s.UserID = ua.UserID
+       WHERE ua.UserID = ?
+       LIMIT 1`,
+      [userId]
+    )
+
+    const r = updated[0]
+    const isVisitor = !!r?.VisitorID
+    res.json({
+      success: true,
+      profile: {
+        UserID: r.UserID,
+        Username: r.Username,
+        Role: r.Role,
+        FirstName: isVisitor ? r.VisitorFirstName : r.StaffFirstName,
+        LastName: isVisitor ? r.VisitorLastName : r.StaffLastName,
+        Email: isVisitor ? r.VisitorEmail : r.StaffEmail,
+        PhoneNumber: isVisitor ? r.VisitorPhone : r.StaffPhone,
+        DateOfBirth: isVisitor ? r.VisitorDOB : r.StaffDOB,
+        Address: isVisitor ? r.VisitorAddress : r.StaffAddress,
+        HireDate: isVisitor ? null : r.StaffHireDate,
+        VisitorID: r.VisitorID || null,
+        EmployeeID: r.EmployeeID || null,
+        IsVisitor: isVisitor,
+      }
+    })
+  } catch (err) {
+    try { if (conn) await conn.rollback() } catch {}
+    if (err && err.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: 'Username already exists' })
+    console.error('Profile update failed:', err)
+    res.status(500).json({ error: String(err) })
+  } finally {
+    if (conn) conn.release()
   }
 })
 
@@ -514,7 +756,8 @@ router.get('/tickets/pricing', async (req, res) => {
 
     // Fetch exhibits with pricing — daily override takes precedence over base price
     const [rows] = await db.execute(
-      `SELECT e.ExhibitID, e.ExhibitName, e.Description, e.MaxCapacity,
+      `SELECT e.ExhibitID, e.ExhibitName, e.Description, e.MaxCapacity, e.ExhibitOffDate,
+              DATE_FORMAT(e.ExhibitOffDate, '%Y-%m-%d') AS ExhibitOffDateISO,
               COALESCE(dgap.GeneralAdmissionPrice,    gap.GeneralAdmissionPrice)       AS RegularPrice,
               COALESCE(dgap.GeneralAdmissionMemberPrice, gap.GeneralAdmissionMemberPrice) AS MemberPrice
        FROM Exhibit e
@@ -537,6 +780,8 @@ router.get('/tickets/pricing', async (req, res) => {
 
     const exhibits = rows.map(e => {
       const booked = bookedMap[e.ExhibitID] || 0
+      const exhibitOffDate = e.ExhibitOffDateISO ? String(e.ExhibitOffDateISO).slice(0, 10) : null
+      const isClosedOnVisitDate = exhibitOffDate === visitDate
       const regularPrice = Number(e.RegularPrice || 0)
       const memberPrice  = isMember
         ? parseFloat((regularPrice * (1 - ticketDiscountPercent / 100)).toFixed(2))
@@ -548,6 +793,11 @@ router.get('/tickets/pricing', async (req, res) => {
         MaxCapacity: e.MaxCapacity,
         Booked:      booked,
         Available:   e.MaxCapacity - booked,
+        ExhibitOffDate: exhibitOffDate,
+        IsClosedOnVisitDate: isClosedOnVisitDate,
+        ClosedMessage: isClosedOnVisitDate
+          ? `${e.ExhibitName} is closed on ${new Date(visitDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.`
+          : null,
         RegularPrice: regularPrice,
         MemberPrice:  memberPrice,
         Price: isMember ? memberPrice : regularPrice,
@@ -615,7 +865,8 @@ router.post('/tickets/purchase', async (req, res) => {
       if (!exhibitId || qty <= 0) continue
 
       const [erows] = await db.execute(
-        `SELECT e.ExhibitID, e.ExhibitName, e.MaxCapacity,
+        `SELECT e.ExhibitID, e.ExhibitName, e.MaxCapacity, e.Status, e.ExhibitOffDate,
+                DATE_FORMAT(e.ExhibitOffDate, '%Y-%m-%d') AS ExhibitOffDateISO,
                 COALESCE(dgap.GeneralAdmissionPrice,       gap.GeneralAdmissionPrice)       AS RegularPrice,
                 COALESCE(dgap.GeneralAdmissionMemberPrice, gap.GeneralAdmissionMemberPrice) AS MemberPrice
          FROM Exhibit e
@@ -628,6 +879,15 @@ router.post('/tickets/purchase', async (req, res) => {
         return res.status(400).json({ error: `Exhibit ${exhibitId} not found` })
       }
       const exhibit = erows[0]
+
+      // Block any exhibit whose off-date matches the requested visit date.
+      const cancelledOn = exhibit.ExhibitOffDateISO ? String(exhibit.ExhibitOffDateISO).slice(0, 10) : null
+      if (cancelledOn === visitDate) {
+        return res.status(409).json({
+          error: `"${exhibit.ExhibitName}" is closed on ${new Date(visitDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}. Please choose another date.`,
+          exhibitId,
+        })
+      }
       const regularPrice = Number(exhibit.RegularPrice || 0)
       const unitPrice = isMember
         ? parseFloat((regularPrice * (1 - ticketDiscountPercent / 100)).toFixed(2))
@@ -656,19 +916,44 @@ router.post('/tickets/purchase', async (req, res) => {
 
     if (preparedItems.length === 0) return res.status(400).json({ error: 'No valid items to purchase' })
 
-    // Insert header row
-    const [tpRes] = await db.execute(
-      'INSERT INTO TicketPurchase (VisitorID, VisitDate, TotalAmount) VALUES (?, ?, ?)',
-      [visitorId, visitDate, totalAmount]
-    )
-    const ticketPurchaseId = tpRes.insertId
+    // Persist purchase + items + issued tickets in one transaction.
+    const conn = await db.getConnection()
+    let ticketPurchaseId = null
+    try {
+      await conn.beginTransaction()
 
-    // Insert one detail row per exhibit
-    for (const it of preparedItems) {
-      await db.execute(
-        'INSERT INTO TicketPurchaseItem (TicketPurchaseID, ExhibitID, Quantity, UnitPrice) VALUES (?, ?, ?, ?)',
-        [ticketPurchaseId, it.exhibitId, it.qty, it.unitPrice]
+      const [tpRes] = await conn.execute(
+        'INSERT INTO TicketPurchase (VisitorID, VisitDate, TotalAmount) VALUES (?, ?, ?)',
+        [visitorId, visitDate, totalAmount]
       )
+      ticketPurchaseId = tpRes.insertId
+
+      const ticketRows = []
+      for (const it of preparedItems) {
+        await conn.execute(
+          'INSERT INTO TicketPurchaseItem (TicketPurchaseID, ExhibitID, Quantity, UnitPrice) VALUES (?, ?, ?, ?)',
+          [ticketPurchaseId, it.exhibitId, it.qty, it.unitPrice]
+        )
+        for (let i = 0; i < it.qty; i++) {
+          ticketRows.push([visitorId, visitDate, ticketPurchaseId])
+        }
+      }
+
+      if (ticketRows.length > 0) {
+        const placeholders = ticketRows.map(() => '(?, ?, ?)').join(', ')
+        const params = ticketRows.flat()
+        await conn.execute(
+          `INSERT INTO Ticket (VisitorID, VisitDate, TicketPurchaseID) VALUES ${placeholders}`,
+          params
+        )
+      }
+
+      await conn.commit()
+    } catch (txErr) {
+      await conn.rollback()
+      throw txErr
+    } finally {
+      conn.release()
     }
 
     res.json({ success: true, ticketPurchaseId, totalAmount, isMember, items: preparedItems })
@@ -732,6 +1017,34 @@ router.post('/membership/cancel', async (req, res) => {
     )
     console.log('[auth] cancel update result:', r)
     if (r && r.affectedRows && r.affectedRows > 0) {
+      // Also resolve the UserID so we can clear any expiry notifications
+      let targetUserId = userId || null
+      if (!targetUserId && targetVisitorId) {
+        try {
+          const [urows] = await db.execute('SELECT UserID FROM Visitor WHERE VisitorID = ? LIMIT 1', [targetVisitorId])
+          if (urows && urows.length > 0) targetUserId = urows[0].UserID
+        } catch (_) {}
+      }
+      // Fallback: resolve via MembershipID → Visitor → UserID
+      if (!targetUserId && targetMembershipId) {
+        try {
+          const [urows] = await db.execute(
+            'SELECT v.UserID FROM Membership m JOIN Visitor v ON v.VisitorID = m.VisitorID WHERE m.MembershipID = ? LIMIT 1',
+            [targetMembershipId]
+          )
+          if (urows && urows.length > 0) targetUserId = urows[0].UserID
+        } catch (_) {}
+      }
+      // Mark "Membership Expiring Soon" notifications as read — no longer relevant after cancel
+      if (targetUserId) {
+        try {
+          await db.execute(
+            "UPDATE Notification SET IsRead = 1 WHERE UserID = ? AND Title = 'Membership Expiring Soon'",
+            [targetUserId]
+          )
+        } catch (_) {}
+      }
+
       const [updated] = await db.execute('SELECT * FROM Membership WHERE MembershipID = ? LIMIT 1', [targetMembershipId])
       console.log('[auth] updated membership row:', (updated && updated[0]) || null)
       return res.json({ success: true, membership: (updated && updated[0]) || null })
@@ -741,6 +1054,46 @@ router.post('/membership/cancel', async (req, res) => {
   } catch (err) {
     console.error('Cancel membership failed:', err)
     res.status(500).json({ error: String(err) })
+  }
+})
+
+// POST /api/membership/renew — extend active membership expiration by 1 year from current expiry
+router.post('/membership/renew', async (req, res) => {
+  const { userId, visitorId } = req.body || {}
+  try {
+    if (!userId && !visitorId) return res.status(400).json({ error: 'userId or visitorId required' })
+
+    // Resolve to a VisitorID
+    let resolvedVisitorId = visitorId
+    if (!resolvedVisitorId && userId) {
+      const [vrows] = await db.execute('SELECT VisitorID FROM Visitor WHERE UserID = ? OR VisitorID = ? LIMIT 1', [userId, userId])
+      if (!vrows || vrows.length === 0) return res.status(404).json({ error: 'Visitor not found' })
+      resolvedVisitorId = vrows[0].VisitorID
+    }
+
+    // Find active membership
+    const [mrows] = await db.execute(
+      `SELECT MembershipID, ExpirationDate FROM Membership WHERE VisitorID = ? AND Status = 'Active' AND IsExpired = 0 LIMIT 1`,
+      [resolvedVisitorId]
+    )
+    if (!mrows || mrows.length === 0) return res.status(400).json({ error: 'No active membership to renew' })
+
+    const { MembershipID } = mrows[0]
+
+    // Extend expiry by 1 year from the current expiration date
+    await db.execute(
+      `UPDATE Membership SET ExpirationDate = DATE_ADD(ExpirationDate, INTERVAL 1 YEAR) WHERE MembershipID = ?`,
+      [MembershipID]
+    )
+
+    const [updated] = await db.execute(
+      `SELECT m.*, mt.TypeName FROM Membership m LEFT JOIN MembershipType mt ON mt.TypeID = m.MembershipTypeID WHERE m.MembershipID = ?`,
+      [MembershipID]
+    )
+    return res.json({ success: true, membership: updated[0] || null })
+  } catch (err) {
+    console.error('Renew membership error:', err)
+    res.status(500).json({ error: 'Failed to renew membership' })
   }
 })
 
@@ -827,13 +1180,234 @@ router.post('/admin/create-account', async (req, res) => {
   }
 })
 
-// GET /api/exhibits — list all exhibits
+// GET /api/admin/users?userId=1&role=Visitor|Curator
+router.get('/admin/users', async (req, res) => {
+  const { userId, role } = req.query
+  if (!userId) return res.status(401).json({ error: 'Authentication required' })
+
+  try {
+    const [adminRows] = await db.execute('SELECT Role FROM UserAccount WHERE UserID = ?', [userId])
+    if (!adminRows?.length || adminRows[0].Role !== 'Admin') {
+      return res.status(403).json({ error: 'Admin access required' })
+    }
+
+    const targetRole = String(role || 'Visitor')
+    if (!['Visitor', 'Curator', 'Gift_Shop_Manager'].includes(targetRole)) {
+      return res.status(400).json({ error: 'role must be Visitor, Curator, or Gift_Shop_Manager' })
+    }
+
+    if (targetRole === 'Visitor') {
+      const [rows] = await db.execute(
+        `SELECT ua.UserID, ua.Username, ua.Role, ua.IsActive,
+                v.VisitorID,
+                v.FirstName, v.LastName, v.Email, v.PhoneNumber,
+                DATE_FORMAT(v.DateOfBirth, '%Y-%m-%d') AS DateOfBirth,
+                v.Address
+         FROM UserAccount ua
+         LEFT JOIN Visitor v ON v.UserID = ua.UserID
+         WHERE ua.Role = 'Visitor'
+         ORDER BY ua.IsActive DESC, ua.UserID DESC`
+      )
+      return res.json({ users: rows })
+    }
+
+    const [rows] = await db.execute(
+      `SELECT ua.UserID, ua.Username, ua.Role, ua.IsActive,
+              s.EmployeeID,
+              s.FirstName, s.LastName, s.Email, s.PhoneNumber,
+              DATE_FORMAT(s.DateOfBirth, '%Y-%m-%d') AS DateOfBirth,
+              DATE_FORMAT(s.HireDate, '%Y-%m-%d') AS HireDate,
+              s.Address
+       FROM UserAccount ua
+       LEFT JOIN Staff s ON s.UserID = ua.UserID
+       WHERE ua.Role = ?
+       ORDER BY ua.IsActive DESC, ua.UserID DESC`,
+      [targetRole]
+    )
+    res.json({ users: rows })
+  } catch (err) {
+    console.error('Admin users lookup failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// PUT /api/admin/users/:id — edit visitor/curator account profile
+router.put('/admin/users/:id', async (req, res) => {
+  const targetUserId = Number(req.params.id)
+  const { userId, username, firstName, lastName, email, phoneNumber, dateOfBirth, address, hireDate } = req.body || {}
+  if (!userId) return res.status(401).json({ error: 'Authentication required' })
+  if (!targetUserId) return res.status(400).json({ error: 'Invalid target user id' })
+
+  let conn
+  try {
+    const [adminRows] = await db.execute('SELECT Role FROM UserAccount WHERE UserID = ?', [userId])
+    if (!adminRows?.length || adminRows[0].Role !== 'Admin') {
+      return res.status(403).json({ error: 'Admin access required' })
+    }
+
+    conn = await db.getConnection()
+    await conn.beginTransaction()
+
+    if (username && String(username).trim()) {
+      await conn.execute('UPDATE UserAccount SET Username = ? WHERE UserID = ?', [String(username).trim(), targetUserId])
+    }
+
+    const [vrows] = await conn.execute('SELECT VisitorID FROM Visitor WHERE UserID = ? LIMIT 1', [targetUserId])
+    if (vrows?.length) {
+      await conn.execute(
+        `UPDATE Visitor
+         SET FirstName=?, LastName=?, Email=?, PhoneNumber=?, DateOfBirth=?, Address=?
+         WHERE UserID = ?`,
+        [firstName || null, lastName || null, email || null, phoneNumber || null, dateOfBirth || null, address || null, targetUserId]
+      )
+    }
+
+    const [srows] = await conn.execute('SELECT EmployeeID FROM Staff WHERE UserID = ? LIMIT 1', [targetUserId])
+    if (srows?.length) {
+      await conn.execute(
+        `UPDATE Staff
+         SET FirstName=?, LastName=?, Email=?, PhoneNumber=?, DateOfBirth=?, Address=?, HireDate=COALESCE(?, HireDate)
+         WHERE UserID = ?`,
+        [firstName || null, lastName || null, email || null, phoneNumber || null, dateOfBirth || null, address || null, hireDate || null, targetUserId]
+      )
+    }
+
+    await conn.commit()
+    res.json({ success: true })
+  } catch (err) {
+    try { if (conn) await conn.rollback() } catch {}
+    if (err && err.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: 'Username already exists' })
+    console.error('Admin user update failed:', err)
+    res.status(500).json({ error: String(err) })
+  } finally {
+    if (conn) conn.release()
+  }
+})
+
+// DELETE /api/admin/users/:id — soft-delete (deactivate) visitor/curator account
+router.delete('/admin/users/:id', async (req, res) => {
+  const targetUserId = Number(req.params.id)
+  const { userId } = req.body || {}
+  if (!userId) return res.status(401).json({ error: 'Authentication required' })
+  if (!targetUserId) return res.status(400).json({ error: 'Invalid target user id' })
+
+  try {
+    const [adminRows] = await db.execute('SELECT Role FROM UserAccount WHERE UserID = ?', [userId])
+    if (!adminRows?.length || adminRows[0].Role !== 'Admin') {
+      return res.status(403).json({ error: 'Admin access required' })
+    }
+    if (Number(userId) === targetUserId) {
+      return res.status(400).json({ error: 'Admin cannot deactivate own account' })
+    }
+
+    const [result] = await db.execute('UPDATE UserAccount SET IsActive = 0 WHERE UserID = ? AND IsActive = 1', [targetUserId])
+    if (!result || result.affectedRows === 0) {
+      return res.status(404).json({ error: 'User not found or already deactivated' })
+    }
+
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Admin user deactivate failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// PUT /api/admin/users/:id/reactivate — reactivate a deactivated account
+router.put('/admin/users/:id/reactivate', async (req, res) => {
+  const targetUserId = Number(req.params.id)
+  const { userId } = req.body || {}
+  if (!userId) return res.status(401).json({ error: 'Authentication required' })
+  if (!targetUserId) return res.status(400).json({ error: 'Invalid target user id' })
+
+  try {
+    const [adminRows] = await db.execute('SELECT Role FROM UserAccount WHERE UserID = ?', [userId])
+    if (!adminRows?.length || adminRows[0].Role !== 'Admin') {
+      return res.status(403).json({ error: 'Admin access required' })
+    }
+
+    const [result] = await db.execute('UPDATE UserAccount SET IsActive = 1 WHERE UserID = ? AND IsActive = 0', [targetUserId])
+    if (!result || result.affectedRows === 0) {
+      return res.status(404).json({ error: 'User not found or already active' })
+    }
+
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Admin user reactivate failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// GET /api/exhibits — list all exhibits with pricing
 router.get('/exhibits', async (req, res) => {
   try {
-    const [rows] = await db.execute('SELECT ExhibitID, ExhibitName, Description FROM Exhibit ORDER BY ExhibitID')
+    const [rows] = await db.execute(
+      `SELECT e.ExhibitID, e.ExhibitName, e.Description, e.Status, e.ExhibitOffDate, e.MaxCapacity,
+              g.GeneralAdmissionPrice AS regularPrice,
+              g.GeneralAdmissionMemberPrice AS memberPrice
+       FROM Exhibit e
+       LEFT JOIN GeneralAdmissionPrices g ON g.ExhibitID = e.ExhibitID
+       ORDER BY e.ExhibitID`
+    )
     res.json({ exhibits: rows })
   } catch (err) {
     console.error('Fetch exhibits failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// POST /api/curator/exhibit/:id/cancel — mark exhibit cancelled, cancel tickets, notify visitors
+router.post('/curator/exhibit/:id/cancel', async (req, res) => {
+  const exhibitId = Number(req.params.id)
+  const { userId, cancelDate } = req.body || {}
+  if (!exhibitId) return res.status(400).json({ error: 'Invalid exhibit id' })
+  if (!userId) return res.status(401).json({ error: 'Authentication required' })
+  if (!cancelDate) return res.status(400).json({ error: 'cancelDate is required' })
+  // Basic date format validation (YYYY-MM-DD)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(cancelDate)) return res.status(400).json({ error: 'cancelDate must be YYYY-MM-DD' })
+  try {
+    const [urows] = await db.execute('SELECT Role FROM UserAccount WHERE UserID = ?', [userId])
+    if (!urows?.length || !['Admin', 'Curator'].includes(urows[0].Role)) {
+      return res.status(403).json({ error: 'Curator or Admin access required' })
+    }
+    const [exRows] = await db.execute(
+      'SELECT ExhibitID, ExhibitName, ExhibitOffDate, Status FROM Exhibit WHERE ExhibitID = ?',
+      [exhibitId]
+    )
+    if (!exRows?.length) return res.status(404).json({ error: 'Exhibit not found' })
+    const exhibit = exRows[0]
+
+    // Update exhibit — the DB trigger fires after this UPDATE and handles
+    // ticket cancellations + visitor/curator notifications automatically.
+    await db.execute(
+      'UPDATE Exhibit SET Status = ?, ExhibitOffDate = ? WHERE ExhibitID = ?',
+      ['Cancelled', cancelDate, exhibitId]
+    )
+
+    res.json({ success: true, exhibitId, cancelDate })
+  } catch (err) {
+    console.error('Cancel exhibit error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// POST /api/curator/exhibit/:id/restore — set exhibit back to Active, clear off date
+router.post('/curator/exhibit/:id/restore', async (req, res) => {
+  const exhibitId = Number(req.params.id)
+  const { userId } = req.body || {}
+  if (!exhibitId) return res.status(400).json({ error: 'Invalid exhibit id' })
+  if (!userId) return res.status(401).json({ error: 'Authentication required' })
+  try {
+    const [urows] = await db.execute('SELECT Role FROM UserAccount WHERE UserID = ?', [userId])
+    if (!urows?.length || !['Admin', 'Curator'].includes(urows[0].Role)) {
+      return res.status(403).json({ error: 'Curator or Admin access required' })
+    }
+    await db.execute(
+      'UPDATE Exhibit SET Status = ?, ExhibitOffDate = NULL WHERE ExhibitID = ?',
+      ['Active', exhibitId]
+    )
+    res.json({ success: true, exhibitId })
+  } catch (err) {
+    console.error('Restore exhibit error:', err)
     res.status(500).json({ error: String(err) })
   }
 })
@@ -1001,6 +1575,138 @@ router.get('/curator/exhibit-report', async (req, res) => {
     res.json({ rows })
   } catch (err) {
     console.error('curator exhibit report error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// ─────────────────────────────────────────
+// EXHIBIT CRUD (Admin only)
+// ─────────────────────────────────────────
+
+// POST /api/admin/exhibits — create a new exhibit + pricing
+router.post('/admin/exhibits', async (req, res) => {
+  try {
+    const { userId, exhibitName, description, maxCapacity, regularPrice } = req.body
+    // verify admin
+    const [[caller]] = await db.execute('SELECT Role FROM UserAccount WHERE UserID = ?', [userId])
+    if (!caller || caller.Role !== 'Admin') return res.status(403).json({ error: 'Admin access required' })
+
+    if (!exhibitName || !exhibitName.trim()) return res.status(400).json({ error: 'Exhibit name is required' })
+    if (!regularPrice || regularPrice <= 0) return res.status(400).json({ error: 'Ticket price must be greater than 0' })
+
+    const cap = parseInt(maxCapacity, 10) || 100
+    const price = parseFloat(regularPrice)
+
+    const [result] = await db.execute(
+      `INSERT INTO Exhibit (ExhibitName, Description, MaxCapacity, Status)
+       VALUES (?, ?, ?, 'Active')`,
+      [exhibitName.trim(), description || null, cap]
+    )
+    const exhibitId = result.insertId
+
+    // insert pricing (member price = regular price; membership discount applied at checkout)
+    await db.execute(
+      `INSERT INTO GeneralAdmissionPrices (ExhibitID, GeneralAdmissionPrice, GeneralAdmissionMemberPrice)
+       VALUES (?, ?, ?)`,
+      [exhibitId, price, price]
+    )
+
+    res.json({
+      success: true,
+      exhibit: { ExhibitID: exhibitId, ExhibitName: exhibitName.trim(), Description: description || null, MaxCapacity: cap, Status: 'Active' }
+    })
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'An exhibit with that name already exists' })
+    console.error('create exhibit error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// PUT /api/admin/exhibits/:id — update exhibit details + pricing
+router.put('/admin/exhibits/:id', async (req, res) => {
+  try {
+    const exhibitId = parseInt(req.params.id, 10)
+    const { userId, exhibitName, description, maxCapacity, regularPrice } = req.body
+    const [[caller]] = await db.execute('SELECT Role FROM UserAccount WHERE UserID = ?', [userId])
+    if (!caller || caller.Role !== 'Admin') return res.status(403).json({ error: 'Admin access required' })
+
+    if (!exhibitName || !exhibitName.trim()) return res.status(400).json({ error: 'Exhibit name is required' })
+
+    const cap = parseInt(maxCapacity, 10) || 100
+
+    await db.execute(
+      `UPDATE Exhibit SET ExhibitName = ?, Description = ?, MaxCapacity = ? WHERE ExhibitID = ?`,
+      [exhibitName.trim(), description || null, cap, exhibitId]
+    )
+
+    // update pricing if provided (member price = regular price; discount applied at checkout)
+    if (regularPrice !== undefined) {
+      const price = parseFloat(regularPrice)
+      const [existing] = await db.execute('SELECT GeneralAdmissionPricesID FROM GeneralAdmissionPrices WHERE ExhibitID = ?', [exhibitId])
+      if (existing.length > 0) {
+        await db.execute(
+          'UPDATE GeneralAdmissionPrices SET GeneralAdmissionPrice = ?, GeneralAdmissionMemberPrice = ? WHERE ExhibitID = ?',
+          [price, price, exhibitId]
+        )
+      } else {
+        await db.execute(
+          'INSERT INTO GeneralAdmissionPrices (ExhibitID, GeneralAdmissionPrice, GeneralAdmissionMemberPrice) VALUES (?, ?, ?)',
+          [exhibitId, price, price]
+        )
+      }
+    }
+
+    res.json({ success: true })
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'An exhibit with that name already exists' })
+    console.error('update exhibit error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// DELETE /api/admin/exhibits/:id — delete exhibit (fails if tickets/artifacts reference it)
+router.delete('/admin/exhibits/:id', async (req, res) => {
+  try {
+    const exhibitId = parseInt(req.params.id, 10)
+    const { userId } = req.body
+    const [[caller]] = await db.execute('SELECT Role FROM UserAccount WHERE UserID = ?', [userId])
+    if (!caller || caller.Role !== 'Admin') return res.status(403).json({ error: 'Admin access required' })
+
+    // Check for artifacts referencing this exhibit
+    const [[artCount]] = await db.execute('SELECT COUNT(*) AS cnt FROM Artifact WHERE ExhibitID = ?', [exhibitId])
+    if (artCount.cnt > 0) return res.status(409).json({ error: `Cannot delete — ${artCount.cnt} artifact(s) still belong to this exhibit. Remove them first.` })
+
+    // Check for ticket purchase items
+    const [[ticketCount]] = await db.execute('SELECT COUNT(*) AS cnt FROM TicketPurchaseItem WHERE ExhibitID = ?', [exhibitId])
+    if (ticketCount.cnt > 0) return res.status(409).json({ error: 'Cannot delete — tickets have been sold for this exhibit.' })
+
+    // Remove pricing first (FK), then exhibit
+    await db.execute('DELETE FROM DailyGeneralAdmissionPrices WHERE ExhibitID = ?', [exhibitId])
+    await db.execute('DELETE FROM GeneralAdmissionPrices WHERE ExhibitID = ?', [exhibitId])
+    const [result] = await db.execute('DELETE FROM Exhibit WHERE ExhibitID = ?', [exhibitId])
+
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Exhibit not found' })
+    res.json({ success: true })
+  } catch (err) {
+    console.error('delete exhibit error:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// GET /api/admin/exhibits/:id — single exhibit with pricing
+router.get('/admin/exhibits/:id', async (req, res) => {
+  try {
+    const exhibitId = parseInt(req.params.id, 10)
+    const [[exhibit]] = await db.execute(
+      `SELECT e.*, g.GeneralAdmissionPrice AS regularPrice, g.GeneralAdmissionMemberPrice AS memberPrice
+       FROM Exhibit e
+       LEFT JOIN GeneralAdmissionPrices g ON g.ExhibitID = e.ExhibitID
+       WHERE e.ExhibitID = ?`, [exhibitId]
+    )
+    if (!exhibit) return res.status(404).json({ error: 'Exhibit not found' })
+    res.json({ exhibit })
+  } catch (err) {
+    console.error('get exhibit error:', err)
     res.status(500).json({ error: String(err) })
   }
 })
@@ -1653,8 +2359,6 @@ router.get('/admin/membership-exhibit-report', async (req, res) => {
   }
 })
 
-export default router;
-
 // retrieves past ticket purchases for a visitor, including exhibit names, prices, quantities, and purchase/visit dates.
 router.get('/visitor/:id/ticket-purchases', async (req, res) => {
   const { id } = req.params
@@ -1674,13 +2378,40 @@ router.get('/visitor/:id/ticket-purchases', async (req, res) => {
         tp.PurchaseDate,
         tp.VisitDate,
         tp.TotalAmount,
-        ${withStatus ? 'tp.Status AS PurchaseStatus' : "'Active' AS PurchaseStatus"},
+      ${withStatus ? "CASE WHEN COALESCE(cf.HasOffDateConflict, 0) = 1 THEN 'Cancelled' ELSE COALESCE(ts.EffectiveStatus, tp.Status, 'Active') END AS PurchaseStatus" : "CASE WHEN COALESCE(cf.HasOffDateConflict, 0) = 1 THEN 'Cancelled' ELSE COALESCE(ts.EffectiveStatus, 'Active') END AS PurchaseStatus"},
+      COALESCE(cf.HasOffDateConflict, 0) AS HasOffDateConflict,
         tpi.TicketPurchaseItemID,
+      tpi.ExhibitID,
         tpi.Quantity,
         tpi.UnitPrice,
         (tpi.Quantity * tpi.UnitPrice) AS Subtotal,
         e.ExhibitName
       FROM TicketPurchase tp
+      LEFT JOIN (
+        SELECT
+          TicketPurchaseID,
+          CASE
+            WHEN SUM(CASE WHEN LOWER(COALESCE(Status, 'active')) IN ('cancelled', 'canceled') THEN 1 ELSE 0 END) > 0
+              THEN 'Cancelled'
+            ELSE 'Active'
+          END AS EffectiveStatus
+        FROM Ticket
+        GROUP BY TicketPurchaseID
+      ) ts ON ts.TicketPurchaseID = tp.TicketPurchaseID
+      LEFT JOIN (
+        SELECT
+          tp2.TicketPurchaseID,
+          MAX(
+            CASE
+              WHEN e2.ExhibitOffDate IS NOT NULL AND e2.ExhibitOffDate = tp2.VisitDate THEN 1
+              ELSE 0
+            END
+          ) AS HasOffDateConflict
+        FROM TicketPurchase tp2
+        JOIN TicketPurchaseItem tpi2 ON tpi2.TicketPurchaseID = tp2.TicketPurchaseID
+        JOIN Exhibit e2 ON e2.ExhibitID = tpi2.ExhibitID
+        GROUP BY tp2.TicketPurchaseID
+      ) cf ON cf.TicketPurchaseID = tp.TicketPurchaseID
       JOIN TicketPurchaseItem tpi ON tp.TicketPurchaseID = tpi.TicketPurchaseID
       JOIN Exhibit e ON tpi.ExhibitID = e.ExhibitID
       WHERE tp.VisitorID = ?
@@ -1708,11 +2439,13 @@ router.get('/visitor/:id/ticket-purchases', async (req, res) => {
           VisitDate: r.VisitDate,
           TotalAmount: r.TotalAmount,
           PurchaseStatus: r.PurchaseStatus,
+          HasOffDateConflict: Number(r.HasOffDateConflict || 0) === 1,
           items: []
         }
       }
       map[r.TicketPurchaseID].items.push({
         TicketPurchaseItemID: r.TicketPurchaseItemID,
+        ExhibitID: r.ExhibitID,
         ExhibitName: r.ExhibitName,
         Quantity: r.Quantity,
         UnitPrice: r.UnitPrice,
@@ -1731,20 +2464,230 @@ router.get('/visitor/:id/ticket-purchases', async (req, res) => {
 router.post('/visitor/ticket-purchases/cancel', async (req, res) => {
   const { ticketPurchaseId } = req.body
   if (!ticketPurchaseId) return res.status(400).json({ error: 'ticketPurchaseId is required' })
+  let conn
   try {
-    // Update TicketPurchase status (no-op if Status column doesn't exist yet)
+    conn = await db.getConnection()
+    await conn.beginTransaction()
+
+    // Update TicketPurchase status.
     try {
-      await db.execute(
+      await conn.execute(
         'UPDATE TicketPurchase SET Status = ? WHERE TicketPurchaseID = ?',
         ['Cancelled', ticketPurchaseId]
       )
     } catch (colErr) {
       if (!String(colErr).toLowerCase().includes('status')) throw colErr
-      // Status column missing — treat as success (migration pending)
+      // Status column missing — keep backward compatibility.
     }
+
+    // Keep Ticket rows in sync so trigger logic can exclude canceled tickets.
+    try {
+      await conn.execute(
+        'UPDATE Ticket SET Status = ? WHERE TicketPurchaseID = ?',
+        ['Cancelled', ticketPurchaseId]
+      )
+    } catch (colErr) {
+      if (!String(colErr).toLowerCase().includes('status')) throw colErr
+    }
+
+    await conn.commit()
     res.json({ success: true, message: 'Ticket purchase cancelled successfully' })
   } catch (err) {
+    try { if (conn) await conn.rollback() } catch {}
     console.error('Cancel ticket purchase failed:', err)
+    res.status(500).json({ error: String(err) })
+  } finally {
+    if (conn) conn.release()
+  }
+})
+
+// POST reschedule a ticket purchase to a new visit date
+router.post('/visitor/ticket-purchases/reschedule', async (req, res) => {
+  const { userId, ticketPurchaseId, newVisitDate } = req.body || {}
+  if (!ticketPurchaseId) return res.status(400).json({ error: 'ticketPurchaseId is required' })
+  if (!newVisitDate || !/^\d{4}-\d{2}-\d{2}$/.test(String(newVisitDate))) {
+    return res.status(400).json({ error: 'newVisitDate must be YYYY-MM-DD' })
+  }
+
+  try {
+    // Resolve visitor from provided identity (user id or visitor id)
+    let visitorId = null
+    if (userId) {
+      const [vrows] = await db.execute(
+        'SELECT VisitorID FROM Visitor WHERE UserID = ? OR VisitorID = ? LIMIT 1',
+        [userId, userId]
+      )
+      if (vrows && vrows.length > 0) visitorId = vrows[0].VisitorID
+    }
+
+    const [purchaseRows] = await db.execute(
+      `SELECT TicketPurchaseID, VisitorID, VisitDate,
+              DATE_FORMAT(VisitDate, '%Y-%m-%d') AS VisitDateISO,
+              COALESCE(Status, 'Active') AS PurchaseStatus
+       FROM TicketPurchase
+       WHERE TicketPurchaseID = ?
+       LIMIT 1`,
+      [ticketPurchaseId]
+    )
+    if (!purchaseRows || purchaseRows.length === 0) {
+      return res.status(404).json({ error: 'Ticket purchase not found' })
+    }
+
+    const purchase = purchaseRows[0]
+    if (visitorId && Number(purchase.VisitorID) !== Number(visitorId)) {
+      return res.status(403).json({ error: 'This ticket purchase does not belong to the current visitor' })
+    }
+    const oldDate = purchase.VisitDateISO ? String(purchase.VisitDateISO).slice(0, 10) : null
+    if (oldDate === newVisitDate) {
+      return res.status(400).json({ error: 'Sorry! Exhibit closed on this day. Please reschedule to a different date' })
+    }
+
+    const [items] = await db.execute(
+      `SELECT tpi.ExhibitID, tpi.Quantity, e.ExhibitName, e.MaxCapacity, e.Status, e.ExhibitOffDate,
+              DATE_FORMAT(e.ExhibitOffDate, '%Y-%m-%d') AS ExhibitOffDateISO
+       FROM TicketPurchaseItem tpi
+       JOIN Exhibit e ON e.ExhibitID = tpi.ExhibitID
+       WHERE tpi.TicketPurchaseID = ?`,
+      [ticketPurchaseId]
+    )
+    if (!items || items.length === 0) {
+      return res.status(400).json({ error: 'Ticket purchase has no ticket items to reschedule' })
+    }
+
+    const [[conflictRow]] = await db.execute(
+      `SELECT COUNT(*) AS conflicts
+       FROM TicketPurchaseItem tpi
+       JOIN Exhibit e ON e.ExhibitID = tpi.ExhibitID
+       WHERE tpi.TicketPurchaseID = ?
+         AND e.ExhibitOffDate IS NOT NULL
+         AND e.ExhibitOffDate = ?`,
+      [ticketPurchaseId, purchase.VisitDate]
+    )
+    const hasOffDateConflict = Number(conflictRow?.conflicts || 0) > 0
+    const purchaseStatus = String(purchase.PurchaseStatus || 'Active').toLowerCase()
+    const isCancelled = purchaseStatus === 'cancelled' || purchaseStatus === 'canceled'
+    if (purchaseStatus !== 'active' && !(isCancelled && hasOffDateConflict)) {
+      return res.status(409).json({ error: 'Only active or exhibit-conflicted ticket purchases can be rescheduled' })
+    }
+
+    // Validate exhibit availability + capacity on new date
+    for (const it of items) {
+      const cancelledOn = it.ExhibitOffDateISO ? String(it.ExhibitOffDateISO).slice(0, 10) : null
+      if (cancelledOn === newVisitDate) {
+        return res.status(409).json({
+          error: `"${it.ExhibitName}" is not available on ${new Date(newVisitDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}. Please choose another date.`,
+          exhibitId: it.ExhibitID,
+        })
+      }
+
+      const [[bookedRow]] = await db.execute(
+        `SELECT COALESCE(SUM(tpi.Quantity), 0) AS Booked
+         FROM TicketPurchaseItem tpi
+         JOIN TicketPurchase tp ON tp.TicketPurchaseID = tpi.TicketPurchaseID
+         WHERE tp.VisitDate = ?
+           AND tpi.ExhibitID = ?
+           AND tp.TicketPurchaseID <> ?
+           AND COALESCE(tp.Status, 'Active') = 'Active'`,
+        [newVisitDate, it.ExhibitID, ticketPurchaseId]
+      )
+
+      const available = Number(it.MaxCapacity || 0) - Number(bookedRow.Booked || 0)
+      if (Number(it.Quantity || 0) > available) {
+        return res.status(409).json({
+          error: `Not enough capacity for "${it.ExhibitName}" on ${newVisitDate}. Requested ${it.Quantity}, available ${available}.`,
+          exhibitId: it.ExhibitID,
+          available,
+        })
+      }
+    }
+
+    const conn = await db.getConnection()
+    try {
+      await conn.beginTransaction()
+
+      await conn.execute(
+        'UPDATE TicketPurchase SET VisitDate = ?, Status = ? WHERE TicketPurchaseID = ?',
+        [newVisitDate, 'Active', ticketPurchaseId]
+      )
+
+      // Keep issued ticket rows in sync so reports and future checks stay consistent.
+      await conn.execute(
+        'UPDATE Ticket SET VisitDate = ?, Status = ? WHERE TicketPurchaseID = ?',
+        [newVisitDate, 'Active', ticketPurchaseId]
+      )
+
+      await conn.commit()
+    } catch (txErr) {
+      await conn.rollback()
+      throw txErr
+    } finally {
+      conn.release()
+    }
+
+    // Rescheduling resolves the off-date conflict for this purchase.
+    // Mark any unread ticket reschedule notifications for this visitor as read.
+    const [[visitorRow]] = await db.execute(
+      'SELECT UserID FROM Visitor WHERE VisitorID = ? LIMIT 1',
+      [purchase.VisitorID]
+    )
+    if (visitorRow?.UserID) {
+      await db.execute(
+        `UPDATE Notification
+         SET IsRead = 1
+         WHERE UserID = ?
+           AND Title = 'Ticket Reschedule Required'
+           AND CAST(IsRead AS UNSIGNED) = 0`,
+        [visitorRow.UserID]
+      )
+    }
+
+    res.json({ success: true, ticketPurchaseId, oldVisitDate: oldDate, newVisitDate })
+  } catch (err) {
+    console.error('Reschedule ticket purchase failed:', err)
     res.status(500).json({ error: String(err) })
   }
 })
+
+// ── NOTIFICATIONS ─────────────────────────────────────────────────────────────
+
+// GET /api/notifications/:userId
+router.get('/notifications/:userId', async (req, res) => {
+  const { userId } = req.params
+  try {
+    const [rows] = await db.execute(
+      `SELECT NotificationID, Title, Message,
+              CAST(IsRead AS UNSIGNED) AS IsRead,
+              CreatedAt
+       FROM Notification
+       WHERE UserID = ? AND IsRead = 0
+       ORDER BY CreatedAt DESC
+       LIMIT 50`,
+      [userId]
+    )
+    res.json({ notifications: rows })
+  } catch (err) {
+    console.error('Fetch notifications failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// POST /api/notifications/mark-read
+router.post('/notifications/mark-read', async (req, res) => {
+  const { userId, notificationId } = req.body
+  try {
+    if (notificationId) {
+      await db.execute(
+        'UPDATE Notification SET IsRead = 1 WHERE NotificationID = ? AND UserID = ?',
+        [notificationId, userId]
+      )
+    } else {
+      await db.execute('UPDATE Notification SET IsRead = 1 WHERE UserID = ?', [userId])
+    }
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Mark notification read failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+export default router;

@@ -33,6 +33,10 @@
 .btn.ghost{background:transparent;border:1px solid rgba(2,6,23,0.06);color:var(--muted);padding:8px 12px;border-radius:8px}
 .btn.primary{background:linear-gradient(90deg,#2563eb,#4f89ff);color:#fff;padding:8px 12px;border-radius:8px}
 .btn.btn-disabled,.btn[disabled]{background:#e5e7eb;color:#9ca3af;border:1px solid #e5e7eb;cursor:not-allowed;box-shadow:none;padding:8px 12px;border-radius:8px}
+.btn.renew{background:linear-gradient(90deg,#059669,#34d399);color:#fff;padding:8px 12px;border-radius:8px;font-weight:700;white-space:nowrap}
+.btn.renew.in-cart{background:linear-gradient(90deg,#065f46,#059669);opacity:.85}
+.card-actions-row{display:flex;gap:8px;justify-content:flex-end;align-items:center;flex-wrap:wrap}
+.renew-projected{font-size:.8em;color:#059669;font-style:italic}
 
 @media (max-width:920px){
   .membership-grid{grid-template-columns:1fr 1fr}

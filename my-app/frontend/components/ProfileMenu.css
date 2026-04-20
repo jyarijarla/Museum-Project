@@ -17,3 +17,21 @@
 /* avatar badge overlay */
 .avatar-wrap{position:relative;display:inline-block;overflow:visible}
 .avatar-badge{position:absolute;right:-6px;top:-6px;background:#ff3b30;color:#fff;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;box-shadow:0 6px 14px rgba(255,59,48,0.18);pointer-events:none;border:2px solid #fff}
+
+/* notification bell */
+.notif-wrap{position:relative;display:inline-block}
+.notif-btn{background:none;border:none;font-size:20px;cursor:pointer;padding:4px 6px;border-radius:8px;line-height:1;position:relative}
+.notif-btn:hover{background:rgba(0,0,0,0.06)}
+.notif-badge{position:absolute;top:-4px;right:-4px;background:#ff3b30;color:#fff;min-width:17px;height:17px;border-radius:999px;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 3px;border:2px solid #fff;pointer-events:none}
+.notif-dropdown{position:absolute;right:0;top:42px;background:#fff;border:1px solid rgba(0,0,0,0.08);box-shadow:0 10px 30px rgba(10,20,40,0.12);border-radius:12px;min-width:300px;max-width:340px;z-index:70;max-height:400px;overflow-y:auto}
+.notif-header{padding:12px 16px 8px;font-weight:800;font-size:13px;color:var(--accent);border-bottom:1px solid rgba(0,0,0,0.06)}
+.notif-empty{padding:16px;text-align:center;color:#9ca3af;font-size:13px;margin:0}
+.notif-item{padding:12px 16px;border-bottom:1px solid rgba(0,0,0,0.05)}
+.notif-item:last-child{border-bottom:none}
+.notif-unread{background:rgba(99,102,241,0.05)}
+.notif-title{font-weight:700;font-size:13px;color:#1e293b;margin-bottom:3px}
+.notif-title-row{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:3px}
+.notif-dismiss{background:none;border:none;color:#94a3b8;font-size:14px;cursor:pointer;padding:0 2px;line-height:1;flex-shrink:0}
+.notif-dismiss:hover{color:#ef4444}
+.notif-msg{font-size:12px;color:#475569;line-height:1.4;margin-bottom:4px}
+.notif-time{font-size:11px;color:#94a3b8}

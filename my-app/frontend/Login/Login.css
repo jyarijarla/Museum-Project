@@ -172,3 +172,16 @@ body{
 .create-form .modal-actions .btn{min-width:140px}
 .create-form .modal-actions{margin-top:8px}
 
+/* Reset password modal */
+.reset-modal{
+  width:100%;max-width:400px;background:var(--card);border-radius:var(--radius);
+  padding:28px;box-shadow:0 20px 60px rgba(2,6,23,0.12);
+  display:flex;flex-direction:column;gap:16px;
+}
+.reset-modal-header{display:flex;align-items:center;justify-content:space-between}
+.reset-modal-header h3{margin:0;font-size:20px;color:var(--accent-2)}
+.reset-sub{margin:0;font-size:13px;color:var(--muted)}
+.reset-modal form{display:flex;flex-direction:column;gap:14px}
+.reset-success{display:flex;flex-direction:column;gap:16px}
+.reset-success p{margin:0;font-size:14px;color:var(--muted)}
+

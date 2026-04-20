@@ -238,14 +238,16 @@ export default function Tickets() {
               <div className="exhibits-grid">
                 {exhibits.map(exhibit => {
                   const qty = quantities[exhibit.ExhibitID] || 0
+                  const isClosed = !!exhibit.IsClosedOnVisitDate
                   const soldOut = exhibit.Available <= 0
+                  const isUnavailable = isClosed || soldOut
                   const cfg = EXHIBIT_CONFIG[exhibit.ExhibitID] || { gradient: 'linear-gradient(160deg,#1e293b,#334155)', accent: '#94a3b8', icon: '🎭', tag: 'Exhibition' }
                   const capacityPct = Math.max(0, Math.min(100, (exhibit.Available / exhibit.MaxCapacity) * 100))
                   const isSelected = qty > 0
                   return (
                     <div
                       key={exhibit.ExhibitID}
-                      className={`exhibit-card${soldOut ? ' sold-out' : ''}${isSelected ? ' selected' : ''}`}
+                      className={`exhibit-card${isUnavailable ? ' sold-out' : ''}${isSelected ? ' selected' : ''}`}
                       style={{ '--accent': cfg.accent }}
                     >
                       {/* Art panel */}
@@ -274,9 +276,21 @@ export default function Tickets() {
                             />
                           </div>
                           <span className={`cap-label${exhibit.Available < 10 ? ' cap-label-low' : ''}`}>
-                            {soldOut ? '🔴 Sold out' : exhibit.Available < 10 ? `⚠️ Only ${exhibit.Available} left` : `${exhibit.Available} spots`}
+                            {isClosed
+                              ? '🚫 Closed on selected date'
+                              : soldOut
+                                ? '🔴 Sold out'
+                                : exhibit.Available < 10
+                                  ? `⚠️ Only ${exhibit.Available} left`
+                                  : `${exhibit.Available} spots`}
                           </span>
                         </div>
+
+                        {isClosed && (
+                          <div className="error-msg" style={{ marginBottom: 8, fontSize: 12 }}>
+                            {exhibit.ClosedMessage || 'This exhibit is closed on the selected date.'}
+                          </div>
+                        )}
 
                         {/* Price row */}
                         <div className="price-row">
@@ -296,7 +310,7 @@ export default function Tickets() {
                         <div className="qty-row">
                           <button className="qty-btn" disabled={qty <= 0} onClick={() => setQty(exhibit.ExhibitID, qty - 1)}>−</button>
                           <span className="qty-num">{qty}</span>
-                          <button className="qty-btn" disabled={soldOut || qty >= exhibit.Available} onClick={() => setQty(exhibit.ExhibitID, qty + 1)}>+</button>
+                          <button className="qty-btn" disabled={isUnavailable || qty >= exhibit.Available} onClick={() => setQty(exhibit.ExhibitID, qty + 1)}>+</button>
                           {qty > 0 && <span className="qty-subtotal">${(exhibit.Price * qty).toFixed(2)}</span>}
                         </div>
                       </div>

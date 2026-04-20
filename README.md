@@ -4,7 +4,7 @@ A full-stack web application for managing a city museum — including exhibits, 
 
 ## Live Demo
 
-Deployed on Vercel: https://museum-project-ntb8d4h35-joseph-yarijarlas-projects.vercel.app/
+Deployed on Vercel: https://museum-project-umber.vercel.app/
 
 ## Tech Stack
 
